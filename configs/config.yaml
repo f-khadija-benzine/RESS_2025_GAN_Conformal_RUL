@@ -1,0 +1,98 @@
+# ============================================================
+#  Configuration — RESS 2025 GAN-Conformal-RUL
+#  Update values as decisions are made during implementation
+# ============================================================
+
+paths:
+  data_root: "data/raw/XJTU-SY"
+  processed: "data/processed"
+  results: "results"
+  figures: "results/figures"
+
+dataset:
+  name: "XJTU-SY"
+  sampling_rate: 25600
+  recording_duration: 1.28
+  samples_per_file: 32768
+  recording_interval: 60
+  n_channels: 2
+  n_bearings: 15
+  n_conditions: 3
+
+health_indicator:
+  method: "velocity_rms"
+  freq_band_low_factor: 0.2
+  smoothing_window: 3
+  fpt_method: "2sigma"
+  fpt_consecutive: 2
+  eol_threshold: 0.27
+
+stage_labels:
+  n_stages: 3
+  acceleration_method: "first_diff_sigma"
+  acceleration_sigma: 1.0
+
+windowing:
+  window_size: 30
+  stride: 1
+  rul_max: null
+
+cross_validation:
+  n_folds: 5
+  calibration_fraction: 0.2
+
+gan:
+  architecture: "conditional_wgan_gp"
+  generator:
+    noise_dim: 100
+    hidden_dim: 128
+    n_layers: 3
+  discriminator:
+    hidden_dim: 128
+    n_layers: 3
+  training:
+    epochs: 500
+    batch_size: 64
+    lr_generator: 0.0001
+    lr_discriminator: 0.0001
+    gp_lambda: 10.0
+    n_critic: 5
+  generation:
+    target_balance: true
+    augmentation_ratio: null
+
+model:
+  encoder:
+    type: "bilstm"
+    hidden_dim: 128
+    n_layers: 2
+    dropout: 0.3
+    attention: true
+  rul_head:
+    hidden_dims: [64, 32]
+    activation: "relu"
+  stage_head:
+    hidden_dims: [64]
+    n_classes: 3
+  training:
+    epochs: 200
+    batch_size: 64
+    learning_rate: 0.001
+    optimizer: "adam"
+    weight_decay: 0.0001
+    scheduler: "reduce_on_plateau"
+    scheduler_patience: 10
+    scheduler_factor: 0.5
+    early_stopping_patience: 20
+    loss_lambda: 0.5
+
+conformal:
+  method: "split"
+  coverage_levels: [0.80, 0.85, 0.90, 0.95]
+  default_coverage: 0.90
+
+evaluation:
+  point_metrics: ["rmse", "mae", "score"]
+  interval_metrics: ["picp", "mpiw"]
+
+seed: 42

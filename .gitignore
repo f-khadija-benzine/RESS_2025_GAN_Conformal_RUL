@@ -1,0 +1,30 @@
+# Data (downloaded at runtime, NOT stored in git)
+data/raw/
+data/processed/
+*.csv
+*.npy
+*.pkl
+*.h5
+
+# Results (regenerated from code)
+results/figures/*.png
+results/*.pkl
+results/*.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# Kaggle
+kaggle.json
+*.zip
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
