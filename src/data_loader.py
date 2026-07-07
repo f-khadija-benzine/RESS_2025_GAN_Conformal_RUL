@@ -142,7 +142,7 @@ class XJTUSYLoader:
 
         for i, csv_file in enumerate(csv_files):
             try:
-                df = pd.read_csv(csv_file, header=None)
+                df = pd.read_csv(csv_file)
                 if df.shape[1] >= 2:
                     n_samples = min(df.shape[0], SAMPLES_PER_FILE)
                     raw_signals[i, :n_samples, 0] = df.iloc[:n_samples, 0].values.astype(np.float32)
