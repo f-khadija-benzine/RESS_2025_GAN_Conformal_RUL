@@ -234,7 +234,7 @@ def detect_fpt(hi, n_consecutive=2):
     baseline_end = max(int(len(hi) * 0.2), 10)
     mu = np.mean(hi[:baseline_end])
     sigma = np.std(hi[:baseline_end])
-    threshold = mu + 2 * sigma
+    threshold = mu + 3 * sigma
 
     # Find first occurrence of n_consecutive exceedances
     count = 0
