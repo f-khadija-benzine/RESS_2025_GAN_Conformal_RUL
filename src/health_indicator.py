@@ -216,36 +216,56 @@ def smooth(signal, window=3):
 
 # ── Stage labeling ───────────────────────────────────────────────────
 
-def detect_fpt(hi, n_consecutive=2):
-    """Detect First Prediction Time using the 3-sigma method.
+def detect_fpt(hi, n_consecutive=5, min_relative_rise=0.10):
+    """Detect First Prediction Time using a guarded 3-sigma method.
 
-    FPT = first time n_consecutive consecutive HI values exceed mu + 3*sigma,
-    where mu and sigma are computed from the first 20% of the signal
-    (assumed healthy baseline). This baseline window guarantees the threshold
-    is estimated from healthy operation only, uncontaminated by later
-    degradation.
+    FPT = first time `n_consecutive` consecutive HI values exceed BOTH:
+      (a) the statistical threshold  mu + 3*sigma, and
+      (b) a relative floor          mu * (1 + min_relative_rise),
+    where mu and sigma are estimated from the first 20% of the trajectory
+    (assumed healthy baseline).
 
-    If the threshold is never crossed (near-monotonic bearings whose HI does
-    not spike), FPT cannot be detected and a fallback of 80% of life is used.
-    The caller is told which case occurred via the returned `detected` flag,
-    so fallback bearings can be annotated or excluded downstream.
+    WHY TWO GUARDS
+    --------------
+    The plain 3-sigma rule fails on long-lived bearings. When a bearing runs
+    for thousands of minutes its baseline is extremely stable, so sigma is
+    tiny and mu + 3*sigma sits only a hair above the mean. Ordinary
+    operational noise (settling transients, lubrication shifts) then crosses
+    it within the first few minutes, and the bearing gets labelled
+    "degrading" for ~99% of its life. On XJTU-SY the unguarded rule produced
+    FPT = 23 min for Bearing 3-1 (life 2537 min) and FPT = 169 min for
+    Bearing 3-2 (life 2495 min) -- both physically implausible.
+
+    The guards target that failure mode directly:
+      * Persistence (n_consecutive): a transient blip cannot stay above the
+        threshold for many consecutive samples; genuine degradation can.
+      * Relative floor (min_relative_rise): the HI must rise by a meaningful
+        FRACTION of its own baseline, not merely by a few tiny sigmas. This
+        is what prevents a razor-thin threshold from being tripped by noise
+        when sigma is very small.
 
     Args:
         hi: 1D health indicator array
-        n_consecutive: number of consecutive exceedances required
+        n_consecutive: consecutive exceedances required (persistence guard)
+        min_relative_rise: fractional rise above baseline mean required
+                           (0.10 = HI must exceed 110% of baseline mu)
 
     Returns:
         fpt_idx: index of FPT
-        detected: True if a real threshold crossing was found,
+        detected: True if a genuine crossing was found,
                   False if the 80%-of-life fallback was used
     """
-    # Compute baseline statistics from first 20% of data (healthy baseline)
+    # Baseline statistics from the first 20% (healthy) of the trajectory
     baseline_end = max(int(len(hi) * 0.2), 10)
     mu = np.mean(hi[:baseline_end])
     sigma = np.std(hi[:baseline_end])
-    threshold = mu + 3 * sigma
 
-    # Find first occurrence of n_consecutive exceedances
+    # Both conditions must hold -> take the stricter (higher) threshold
+    thr_sigma = mu + 3.0 * sigma
+    thr_relative = mu * (1.0 + min_relative_rise)
+    threshold = max(thr_sigma, thr_relative)
+
+    # First run of n_consecutive samples above the threshold
     count = 0
     for i in range(len(hi)):
         if hi[i] > threshold:
@@ -255,7 +275,7 @@ def detect_fpt(hi, n_consecutive=2):
         else:
             count = 0
 
-    # Never detected: fall back to 80% of signal, flag as NOT detected
+    # Never crossed: fall back to 80% of life, flagged as NOT detected
     return int(len(hi) * 0.8), False
 
 
@@ -332,17 +352,20 @@ class HealthIndicatorPipeline:
     """Complete pipeline: raw signals → features + stage labels."""
 
     def __init__(self, hi_method='simple_rms', smoothing_window=3,
-                 fpt_consecutive=2, acceleration_sigma=1.0):
+                 fpt_consecutive=5, fpt_min_relative_rise=0.10,
+                 acceleration_sigma=1.0):
         """
         Args:
             hi_method: 'simple_rms' or 'velocity_rms'
             smoothing_window: moving average window for HI smoothing
             fpt_consecutive: consecutive exceedances for FPT detection
+            fpt_min_relative_rise: fractional rise above baseline required
             acceleration_sigma: sigma factor for acceleration point
         """
         self.hi_method = hi_method
         self.smoothing_window = smoothing_window
         self.fpt_consecutive = fpt_consecutive
+        self.fpt_min_relative_rise = fpt_min_relative_rise
         self.acceleration_sigma = acceleration_sigma
 
     def process_bearing(self, bearing_data, verbose=True):
@@ -390,7 +413,8 @@ class HealthIndicatorPipeline:
         hi_sm = smooth(hi_raw, self.smoothing_window)
 
         # 3. Detect FPT and EOL
-        fpt_idx, fpt_detected = detect_fpt(hi_sm, self.fpt_consecutive)
+        fpt_idx, fpt_detected = detect_fpt(
+            hi_sm, self.fpt_consecutive, self.fpt_min_relative_rise)
         eol_idx = n_rec - 1  # last recording = failure
 
         # 4. Detect acceleration point
@@ -416,7 +440,7 @@ class HealthIndicatorPipeline:
         }
 
         if verbose:
-            flag = "detected" if fpt_detected else "FALLBACK (80% of life)"
+            flag = "detected" if fpt_detected else "FALLBACK"
             print(f"  FPT: t={fpt_idx} min [{flag}] | Acc: t={acc_idx} min | EOL: t={eol_idx} min")
             print(f"  Stages: S1={stage_counts[1]}, S2={stage_counts[2]}, S3={stage_counts[3]}")
 
@@ -456,16 +480,13 @@ class HealthIndicatorPipeline:
 
         if verbose:
             total = sum(total_stages.values())
-            n_fallback = sum(1 for r in results.values() if not r['fpt_detected'])
             print(f"\n=== GLOBAL STAGE DISTRIBUTION ===")
             for s in [1, 2, 3]:
                 pct = 100 * total_stages[s] / total
                 print(f"  Stage {s}: {total_stages[s]} ({pct:.1f}%)")
             print(f"  Total: {total}")
-            print(f"  FPT detected: {len(results) - n_fallback}/{len(results)} bearings "
-                  f"({n_fallback} used 80%-of-life fallback)")
-            if n_fallback > 0:
-                fb = [r['bearing_id'] for r in results.values() if not r['fpt_detected']]
-                print(f"  Fallback bearings: {', '.join(fb)}")
+            n_fb = sum(1 for r in results.values() if not r['fpt_detected'])
+            print(f"  FPT detected: {len(results) - n_fb}/{len(results)} bearings"
+                  f"{' (' + str(n_fb) + ' fallback)' if n_fb else ''}")
 
         return results
