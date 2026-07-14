@@ -109,21 +109,72 @@ def make_windows(features, stage_labels, window_size=WINDOW_SIZE, stride=STRIDE)
 
 # ── Fold construction ────────────────────────────────────────────────
 
-def build_folds():
+MIN_CAL_S3_WINDOWS = 100   # minimum near-failure windows per calibration set
+
+
+def count_stage_windows(results, bearing_id, stage, window_size=WINDOW_SIZE):
+    """Number of windows of a given stage this bearing would contribute.
+
+    A window inherits the stage of its LAST time step, so the count is the
+    number of recordings of that stage that fall at or beyond index
+    (window_size - 1).
+    """
+    if bearing_id not in results:
+        return 0
+    labels = results[bearing_id]['stage_labels']
+    if len(labels) < window_size:
+        return 0
+    return int((labels[window_size - 1:] == stage).sum())
+
+
+def build_folds(results=None):
     """Build 5 folds, each testing on one bearing per operating condition.
 
-    Fold k tests on Bearings 1-k, 2-k, 3-k. Every fold therefore spans
-    all three speed/load settings, preventing evaluation bias toward any
-    single operating condition (Lu et al. 2022 protocol).
+    Fold k tests on Bearings 1-k, 2-k, 3-k. Every fold therefore spans all
+    three speed/load settings, preventing evaluation bias toward any single
+    operating condition (Lu et al. 2022 protocol). From the 12 remaining
+    bearings, 2 are held out for conformal calibration and 1 for
+    validation, leaving 9 for training.
 
-    From the 12 remaining bearings, 2 are held out for conformal
-    calibration and 1 for validation, leaving 9 for training. The
-    calibration bearings are drawn from different conditions where
-    possible so the nonconformity scores are not specific to one regime.
+    CALIBRATION SELECTION IS STAGE-AWARE
+    ------------------------------------
+    Near-failure data is extremely concentrated in this dataset: Bearing
+    3-2 alone holds ~51% of all Stage-3 windows, and five bearings hold
+    fewer than ten each. Selecting calibration bearings by index rotation
+    therefore produces wildly uneven near-failure representation -- one
+    fold ended up with 29 Stage-3 calibration windows while another had
+    636.
+
+    That matters because the conformal interval width is the (1-alpha)
+    quantile of the calibration nonconformity scores, and the scores that
+    set the upper tail come predominantly from near-failure windows, where
+    the model is least certain. A quantile estimated from 29 samples is
+    noise, not a quantile; and per-stage coverage (PICP on Stage 3) cannot
+    be claimed at all from so few points.
+
+    Calibration bearings are therefore chosen to satisfy two requirements:
+      1. At least MIN_CAL_S3_WINDOWS near-failure windows, so the
+         near-failure quantile is estimable.
+      2. A stage composition as close as possible to that fold's TEST set,
+         since split conformal prediction assumes exchangeability between
+         calibration and test. A calibration set of mostly-healthy windows
+         paired with a mostly-degraded test set yields intervals calibrated
+         on easy examples and applied to hard ones, producing systematic
+         under-coverage.
+
+    This is a constraint on the DATA SPLIT, imposed before any model is
+    trained; it is not tuned against model performance. Note also that GAN
+    augmentation cannot substitute for it: synthetic windows enter the
+    TRAINING set only. Calibration must remain real data, or the
+    distribution-free coverage guarantee has no basis.
+
+    Args:
+        results: dict from HealthIndicatorPipeline.process_all(). If None,
+                 falls back to the legacy index-rotation split (kept only
+                 for reproducing earlier runs).
 
     Returns:
-        list of 5 dicts, each with keys 'test', 'cal', 'val', 'train'
-        mapping to lists of bearing IDs
+        list of 5 dicts with keys 'fold', 'test', 'cal', 'val', 'train'
     """
     all_bearings = [f"Bearing{c}_{j}" for c in (1, 2, 3) for j in range(1, 6)]
 
@@ -132,17 +183,18 @@ def build_folds():
         test = [f"Bearing{c}_{k}" for c in (1, 2, 3)]
         remaining = [b for b in all_bearings if b not in test]
 
-        # Calibration: rotate through the remaining bearings so different
-        # folds calibrate on different bearings, and pick from two
-        # different conditions to avoid condition-specific calibration.
-        cal = [remaining[k % len(remaining)],
-               remaining[(k + 6) % len(remaining)]]
-        cal = list(dict.fromkeys(cal))  # dedupe if the rotation collides
-        while len(cal) < N_CAL_BEARINGS:
-            for b in remaining:
-                if b not in cal:
-                    cal.append(b)
-                    break
+        if results is None:
+            # Legacy path: arbitrary index rotation (stage-blind)
+            cal = [remaining[k % len(remaining)],
+                   remaining[(k + 6) % len(remaining)]]
+            cal = list(dict.fromkeys(cal))
+            while len(cal) < N_CAL_BEARINGS:
+                for b in remaining:
+                    if b not in cal:
+                        cal.append(b)
+                        break
+        else:
+            cal = _select_calibration_bearings(results, remaining, test)
 
         rest = [b for b in remaining if b not in cal]
         val = [rest[k % len(rest)]]
@@ -151,6 +203,50 @@ def build_folds():
         folds.append({'fold': k, 'test': test, 'cal': cal,
                       'val': val, 'train': train})
     return folds
+
+
+def _stage_profile(results, bearings, window_size=WINDOW_SIZE):
+    """Fractional stage composition of a set of bearings, as (p1, p2, p3)."""
+    counts = np.array([
+        sum(count_stage_windows(results, b, s, window_size) for b in bearings)
+        for s in (1, 2, 3)
+    ], dtype=float)
+    total = counts.sum()
+    return counts / total if total > 0 else counts
+
+
+def _select_calibration_bearings(results, candidates, test_bearings,
+                                 window_size=WINDOW_SIZE):
+    """Pick the calibration pair: enough Stage-3 data, and matched to test.
+
+    Scores every candidate pair on how closely its stage profile matches
+    the test set's, subject to a hard floor on near-failure windows. If no
+    pair clears the floor (possible when the near-failure-rich bearings are
+    all in the test set), the floor is relaxed and the pair with the most
+    Stage-3 windows is taken, so the split never fails outright.
+    """
+    from itertools import combinations
+
+    test_profile = _stage_profile(results, test_bearings, window_size)
+
+    scored = []
+    for pair in combinations(candidates, N_CAL_BEARINGS):
+        s3 = sum(count_stage_windows(results, b, 3, window_size) for b in pair)
+        profile = _stage_profile(results, pair, window_size)
+        # L1 distance between calibration and test stage composition
+        divergence = float(np.abs(profile - test_profile).sum())
+        scored.append((pair, s3, divergence))
+
+    eligible = [s for s in scored if s[1] >= MIN_CAL_S3_WINDOWS]
+
+    if eligible:
+        # Among pairs with enough near-failure data, take the best match to test
+        best = min(eligible, key=lambda s: s[2])
+    else:
+        # Floor unreachable: maximise near-failure data instead
+        best = max(scored, key=lambda s: s[1])
+
+    return list(best[0])
 
 
 # ── Normalization ────────────────────────────────────────────────────
@@ -246,11 +342,11 @@ def prepare_fold(results, fold, window_size=WINDOW_SIZE, stride=STRIDE,
 
 def prepare_all_folds(results, window_size=WINDOW_SIZE, stride=STRIDE,
                       verbose=True):
-    """Prepare all 5 folds.
+    """Prepare all 5 folds using stage-aware calibration selection.
 
     Returns:
         list of 5 fold dicts from prepare_fold()
     """
-    folds = build_folds()
+    folds = build_folds(results)
     return [prepare_fold(results, f, window_size, stride, verbose)
             for f in folds]
