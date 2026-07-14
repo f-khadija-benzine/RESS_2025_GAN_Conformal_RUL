@@ -224,7 +224,7 @@ def smooth(signal, window=3):
 
 # ── Stage labeling ───────────────────────────────────────────────────
 
-def detect_fpt(hi, n_consecutive=5, min_relative_rise=0.10):
+def detect_fpt(hi, n_consecutive=5, min_relative_rise=0.20):
     """Detect First Prediction Time using a guarded 3-sigma method.
 
     FPT = first time `n_consecutive` consecutive HI values exceed BOTH:
@@ -360,7 +360,7 @@ class HealthIndicatorPipeline:
     """Complete pipeline: raw signals → features + stage labels."""
 
     def __init__(self, hi_method='simple_rms', smoothing_window=3,
-                 fpt_consecutive=5, fpt_min_relative_rise=0.10,
+                 fpt_consecutive=5, fpt_min_relative_rise=0.20,
                  acceleration_sigma=1.0):
         """
         Args:
