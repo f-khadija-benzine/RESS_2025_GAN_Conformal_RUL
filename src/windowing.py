@@ -110,6 +110,15 @@ def make_windows(features, stage_labels, window_size=WINDOW_SIZE, stride=STRIDE)
 # ── Fold construction ────────────────────────────────────────────────
 
 MIN_CAL_S3_WINDOWS = 100   # minimum near-failure windows per calibration set
+MIN_VAL_WINDOWS = 300      # minimum windows in the validation set
+
+
+def count_windows(results, bearing_id, window_size=WINDOW_SIZE):
+    """Total windows this bearing contributes."""
+    if bearing_id not in results:
+        return 0
+    n_rec = results[bearing_id]['features'].shape[0]
+    return max(0, n_rec - window_size + 1)
 
 
 def count_stage_windows(results, bearing_id, stage, window_size=WINDOW_SIZE):
@@ -197,12 +206,50 @@ def build_folds(results=None):
             cal = _select_calibration_bearings(results, remaining, test)
 
         rest = [b for b in remaining if b not in cal]
-        val = [rest[k % len(rest)]]
+
+        if results is None:
+            val = [rest[k % len(rest)]]
+        else:
+            val = _select_validation_bearing(results, rest, k)
+
         train = [b for b in rest if b not in val]
 
         folds.append({'fold': k, 'test': test, 'cal': cal,
                       'val': val, 'train': train})
     return folds
+
+
+def _select_validation_bearing(results, candidates, fold_k,
+                               window_size=WINDOW_SIZE):
+    """Pick the validation bearing, requiring a usable number of windows.
+
+    Validation drives early stopping: training halts when the validation
+    RMSE stops improving. That signal is only meaningful if it is computed
+    over enough windows to be stable. Under index rotation the validation
+    bearing was whichever one the counter landed on, which repeatedly
+    produced sets of ~90 windows -- far too few, so the epoch-to-epoch
+    RMSE would fluctuate on noise alone and the stopping point would be
+    effectively arbitrary.
+
+    Candidates below MIN_VAL_WINDOWS are therefore excluded. Among those
+    that qualify, the SMALLEST is chosen: validation only needs to be large
+    enough to be stable, and every window spent on it is a window taken
+    from training. If no candidate reaches the floor (all remaining
+    bearings are short), the largest available is used and the caller is
+    warned rather than the split failing outright.
+    """
+    sized = [(b, count_windows(results, b, window_size)) for b in candidates]
+    eligible = [(b, n) for b, n in sized if n >= MIN_VAL_WINDOWS]
+
+    if eligible:
+        # Smallest bearing that still clears the floor -> preserves training data
+        return [min(eligible, key=lambda t: t[1])[0]]
+
+    best, n = max(sized, key=lambda t: t[1])
+    print(f"  ! Fold {fold_k}: no validation bearing reaches "
+          f"{MIN_VAL_WINDOWS} windows; using {best} ({n} windows). "
+          f"Early stopping will be unreliable for this fold.")
+    return [best]
 
 
 def _stage_profile(results, bearings, window_size=WINDOW_SIZE):
