@@ -298,15 +298,61 @@ def _select_calibration_bearings(results, candidates, test_bearings,
 
 # ── Normalization ────────────────────────────────────────────────────
 
+# Feature order per channel (see health_indicator.FEATURE_NAMES_PER_CHANNEL):
+#   0 rms, 1 peak, 2 peak_to_peak, 3 std, 4 kurtosis, 5 skewness,
+#   6 crest_factor, 7 shape_factor, 8 impulse_factor, 9 clearance_factor
+# repeated for horizontal (0-9) and vertical (10-19) channels.
+#
+# The amplitude features (rms, peak, peak_to_peak, std) and the dimensionless
+# impulse features (crest, shape, impulse, clearance) are strictly positive
+# and span several orders of magnitude: they sit near a small baseline for
+# most of a bearing's life, then rise ~18x at failure. Standardising them
+# directly fails, because the mean and standard deviation are dominated by
+# the abundant healthy windows, so a near-failure spike lands tens of
+# standard deviations out (values up to ~230 were observed). A log transform
+# compresses this multiplicative growth into an additive range before
+# standardisation, which both stabilises the scaler and lets the generator
+# reach the near-failure region of feature space.
+#
+# Kurtosis (4) and skewness (5) are excluded: they can be negative and do
+# not exhibit the same explosive growth.
+
+_LOG_FEATURES_PER_CHANNEL = [0, 1, 2, 3, 6, 7, 8, 9]
+LOG_FEATURE_IDX = np.array(
+    _LOG_FEATURES_PER_CHANNEL + [i + 10 for i in _LOG_FEATURES_PER_CHANNEL]
+)
+
+
+def log_transform(X):
+    """Apply log1p to the amplitude/impulse features, in place-safe fashion.
+
+    Uses log1p(|x|)*sign(x); the features so transformed are non-negative in
+    practice, so this reduces to log1p(x), but the sign guard keeps it robust
+    to any small negative numerical artefacts.
+
+    Args:
+        X: (n_windows, window_size, n_features)
+
+    Returns:
+        transformed copy of X
+    """
+    Xt = np.asarray(X, dtype=np.float32).copy()
+    if Xt.size == 0:
+        return Xt
+    sel = Xt[..., LOG_FEATURE_IDX]
+    Xt[..., LOG_FEATURE_IDX] = np.sign(sel) * np.log1p(np.abs(sel))
+    return Xt
+
+
 def fit_scaler(X_train):
     """Compute per-feature mean and std from the TRAINING windows only.
 
-    Fitting the scaler on training data alone is essential: using
-    statistics from calibration or test data would leak information and
-    inflate performance. The same scaler is then applied to every split.
+    Expects X_train to have already been log-transformed. Fitting on training
+    data alone is essential: using calibration or test statistics would leak
+    information. The same scaler is then applied to every split.
 
     Args:
-        X_train: (n_windows, window_size, n_features)
+        X_train: (n_windows, window_size, n_features), log-transformed
 
     Returns:
         mu:    (n_features,)
@@ -361,7 +407,14 @@ def prepare_fold(results, fold, window_size=WINDOW_SIZE, stride=STRIDE,
             np.concatenate(ss) if ss else np.empty(0, np.int64),
         )
 
-    # Scaler fitted on training windows only, then applied everywhere
+    # Log-transform amplitude/impulse features BEFORE scaling, on every split.
+    # The transform is a fixed, data-independent function (no fitted
+    # parameters), so applying it to all splits leaks no information.
+    for split in ('train', 'val', 'cal', 'test'):
+        X, y_rul, y_stage = split_data[split]
+        split_data[split] = (log_transform(X), y_rul, y_stage)
+
+    # Scaler fitted on (log-transformed) training windows only, applied everywhere
     mu, sigma = fit_scaler(split_data['train'][0])
 
     out = {'fold': fold['fold'], 'scaler': (mu, sigma)}
