@@ -202,7 +202,7 @@ class StageGAN:
             outputs=score, inputs=inter,
             grad_outputs=torch.ones_like(score),
             create_graph=True, retain_graph=True)[0]
-        grad = grad.view(b, -1)
+        grad = grad.reshape(b, -1)
         return ((grad.norm(2, dim=1) - 1) ** 2).mean()
 
     def fit(self, X_train, y_stage_train, verbose=True):
