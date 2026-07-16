@@ -226,6 +226,7 @@ class StageGAN:
 
         self.G.train(); self.D.train()
         crit_step = 0
+        torch.backends.cudnn.enabled = False
         for epoch in range(cfg.epochs):
             ep_d, ep_g, ep_w, n_g = 0.0, 0.0, 0.0, 0
 
@@ -269,8 +270,9 @@ class StageGAN:
                       f"G {ep_g/max(n_g,1):8.3f} | "
                       f"W-dist {ep_w/n_batches:8.4f}")
 
+        torch.backends.cudnn.enabled = True
         return self
-
+     
     @torch.no_grad()
     def sample(self, n, stage):
         """Generate `n` synthetic windows of a given (0-indexed) stage.
