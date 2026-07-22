@@ -303,21 +303,22 @@ def _select_calibration_bearings(results, candidates, test_bearings,
 #   6 crest_factor, 7 shape_factor, 8 impulse_factor, 9 clearance_factor
 # repeated for horizontal (0-9) and vertical (10-19) channels.
 #
-# The amplitude features (rms, peak, peak_to_peak, std) and the dimensionless
-# impulse features (crest, shape, impulse, clearance) are strictly positive
-# and span several orders of magnitude: they sit near a small baseline for
-# most of a bearing's life, then rise ~18x at failure. Standardising them
-# directly fails, because the mean and standard deviation are dominated by
-# the abundant healthy windows, so a near-failure spike lands tens of
-# standard deviations out (values up to ~230 were observed). A log transform
-# compresses this multiplicative growth into an additive range before
-# standardisation, which both stabilises the scaler and lets the generator
-# reach the near-failure region of feature space.
+# The amplitude features (rms, peak, peak_to_peak, std), the dimensionless
+# impulse features (crest, shape, impulse, clearance) AND kurtosis are
+# strictly positive and span several orders of magnitude: they sit near a
+# small baseline for most of a bearing's life, then rise sharply at failure
+# (kurtosis in particular spikes on impulsive faults — up to ~144 observed).
+# Standardising them directly fails, because the mean and standard deviation
+# are dominated by the abundant healthy windows, so a near-failure spike
+# lands tens of standard deviations out. A log transform compresses this
+# multiplicative growth into an additive range before standardisation, which
+# both stabilises the scaler and lets the generator reach the near-failure
+# region of feature space.
 #
-# Kurtosis (4) and skewness (5) are excluded: they can be negative and do
-# not exhibit the same explosive growth.
+# Skewness (5) is excluded: it is bounded, small in magnitude (|skew| < 0.5
+# here), and can be negative, so it neither needs nor suits a log transform.
 
-_LOG_FEATURES_PER_CHANNEL = [0, 1, 2, 3, 6, 7, 8, 9]
+_LOG_FEATURES_PER_CHANNEL = [0, 1, 2, 3, 4, 6, 7, 8, 9]   # all but skewness (5)
 LOG_FEATURE_IDX = np.array(
     _LOG_FEATURES_PER_CHANNEL + [i + 10 for i in _LOG_FEATURES_PER_CHANNEL]
 )
