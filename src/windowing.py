@@ -345,46 +345,85 @@ def log_transform(X):
     return Xt
 
 
-def fit_scaler(X_train):
-    """Compute per-feature mean and std from the TRAINING windows only.
+def fit_scaler(X_train, method='log_clip'):
+    """Fit the scaling parameters on TRAINING windows only.
 
-    Expects X_train to have already been log-transformed. Fitting on training
-    data alone is essential: using calibration or test statistics would leak
-    information. The same scaler is then applied to every split.
+    Three methods are supported so the effect of normalization on GAN
+    training can be compared empirically:
+
+      'log_clip'    : log-transform amplitude/impulse/kurtosis features, then
+                      standardize (mean/std) and clip to +/- CLIP_SIGMA.
+      'robust'      : no log; robust-scale every feature using the median and
+                      interquartile range (IQR). Median/IQR ignore outliers,
+                      so heavy tails and low-variance features are handled by
+                      one principled step.
+      'log_robust'  : log-transform amplitude/impulse/kurtosis features, then
+                      robust-scale. Log compresses multiplicative growth; the
+                      IQR handles residual tails without a hard clip.
+
+    Fitting on training data alone is essential: using calibration or test
+    statistics would leak information.
 
     Args:
-        X_train: (n_windows, window_size, n_features), log-transformed
+        X_train: (n_windows, window_size, n_features). Should already be
+                 log-transformed for the 'log_*' methods (handled in
+                 prepare_fold).
 
     Returns:
-        mu:    (n_features,)
-        sigma: (n_features,)
+        dict of fitted parameters + the method name.
     """
     flat = X_train.reshape(-1, X_train.shape[-1])
-    mu = flat.mean(axis=0)
-    sigma = flat.std(axis=0) + 1e-8   # guard against constant features
-    return mu.astype(np.float32), sigma.astype(np.float32)
+
+    if method in ('log_clip',):
+        center = flat.mean(axis=0)
+        scale = flat.std(axis=0) + 1e-8
+    elif method in ('robust', 'log_robust'):
+        center = np.median(flat, axis=0)
+        q75, q25 = np.percentile(flat, [75, 25], axis=0)
+        scale = (q75 - q25) + 1e-8            # interquartile range
+    else:
+        raise ValueError(f"unknown scaling method: {method}")
+
+    return {'method': method,
+            'center': center.astype(np.float32),
+            'scale': scale.astype(np.float32)}
 
 
-def apply_scaler(X, mu, sigma):
-    """Z-score windows using training-set statistics."""
-    return ((X - mu) / sigma).astype(np.float32)
+CLIP_SIGMA = 5.0   # clip standardized values to +/- this many (log_clip only)
+
+
+def apply_scaler(X, scaler):
+    """Apply a fitted scaler (from fit_scaler) to windows.
+
+    For 'log_clip', values are clipped to +/- CLIP_SIGMA after standardizing,
+    to bound low-variance features (e.g. skewness) whose tiny training std
+    would otherwise re-expand them. The robust methods need no clip: the IQR
+    denominator is not collapsed by low-variance features the way std is.
+    """
+    if len(X) == 0:
+        return X
+    Z = (X - scaler['center']) / scaler['scale']
+    if scaler['method'] == 'log_clip':
+        Z = np.clip(Z, -CLIP_SIGMA, CLIP_SIGMA)
+    return Z.astype(np.float32)
 
 
 # ── Fold preparation ─────────────────────────────────────────────────
 
 def prepare_fold(results, fold, window_size=WINDOW_SIZE, stride=STRIDE,
-                 verbose=True):
+                 scaling_method='log_clip', verbose=True):
     """Window and split one fold into train / val / cal / test tensors.
 
     Args:
         results: dict from HealthIndicatorPipeline.process_all()
         fold: one dict from build_folds()
         window_size, stride: windowing parameters
+        scaling_method: 'log_clip' | 'robust' | 'log_robust'
         verbose: print split summary
 
     Returns:
         dict with 'X_train', 'y_rul_train', 'y_stage_train', and the
-        same for _val, _cal, _test; plus 'scaler' and 'fold'
+        same for _val, _cal, _test; plus 'scaler', 'scaling_method', 'fold'
     """
     split_data = {}
 
@@ -408,46 +447,50 @@ def prepare_fold(results, fold, window_size=WINDOW_SIZE, stride=STRIDE,
             np.concatenate(ss) if ss else np.empty(0, np.int64),
         )
 
-    # Log-transform amplitude/impulse features BEFORE scaling, on every split.
-    # The transform is a fixed, data-independent function (no fitted
-    # parameters), so applying it to all splits leaks no information.
+    # Log-transform (for the 'log_*' methods) BEFORE fitting the scaler, on
+    # every split. The transform is a fixed, parameter-free function, so
+    # applying it to all splits leaks no information.
+    if scaling_method in ('log_clip', 'log_robust'):
+        for split in ('train', 'val', 'cal', 'test'):
+            X, y_rul, y_stage = split_data[split]
+            split_data[split] = (log_transform(X), y_rul, y_stage)
+
+    # Scaler fitted on training windows only, applied to every split
+    scaler = fit_scaler(split_data['train'][0], method=scaling_method)
+
+    out = {'fold': fold['fold'], 'scaler': scaler,
+           'scaling_method': scaling_method}
     for split in ('train', 'val', 'cal', 'test'):
         X, y_rul, y_stage = split_data[split]
-        split_data[split] = (log_transform(X), y_rul, y_stage)
-
-    # Scaler fitted on (log-transformed) training windows only, applied everywhere
-    mu, sigma = fit_scaler(split_data['train'][0])
-
-    out = {'fold': fold['fold'], 'scaler': (mu, sigma)}
-    for split in ('train', 'val', 'cal', 'test'):
-        X, y_rul, y_stage = split_data[split]
-        out[f'X_{split}'] = apply_scaler(X, mu, sigma) if len(X) else X
+        out[f'X_{split}'] = apply_scaler(X, scaler)
         out[f'y_rul_{split}'] = y_rul
         out[f'y_stage_{split}'] = y_stage
 
     if verbose:
-        print(f"\n=== FOLD {fold['fold']} ===")
+        print(f"\n=== FOLD {fold['fold']} (scaling={scaling_method}) ===")
         for split in ('train', 'val', 'cal', 'test'):
             X = out[f'X_{split}']
             ys = out[f'y_stage_{split}']
             counts = [int((ys == s).sum()) for s in (0, 1, 2)]
             pct = [100 * c / max(len(ys), 1) for c in counts]
-            print(f"  {split:5s} {str(fold[split]):45s} "
-                  f"{len(X):5d} windows | "
-                  f"S1 {counts[0]:5d} ({pct[0]:4.1f}%)  "
-                  f"S2 {counts[1]:5d} ({pct[1]:4.1f}%)  "
-                  f"S3 {counts[2]:5d} ({pct[2]:4.1f}%)")
+            rng = f"[{X.min():.2f}, {X.max():.2f}]" if len(X) else "[]"
+            print(f"  {split:5s} {len(X):5d} windows  range {rng:16s} | "
+                  f"S1 {counts[0]:5d}  S2 {counts[1]:5d}  S3 {counts[2]:5d}")
 
     return out
 
 
 def prepare_all_folds(results, window_size=WINDOW_SIZE, stride=STRIDE,
-                      verbose=True):
+                      scaling_method='log_clip', verbose=True):
     """Prepare all 5 folds using stage-aware calibration selection.
+
+    Args:
+        scaling_method: 'log_clip' | 'robust' | 'log_robust'
 
     Returns:
         list of 5 fold dicts from prepare_fold()
     """
     folds = build_folds(results)
-    return [prepare_fold(results, f, window_size, stride, verbose)
+    return [prepare_fold(results, f, window_size, stride,
+                         scaling_method, verbose)
             for f in folds]
