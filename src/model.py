@@ -41,19 +41,19 @@ class ModelConfig:
     n_features: int = 20
 
     # encoder
-    hidden: int = 64            # LSTM hidden size (per direction)
+    hidden: int = 48            # was 64 — fewer params to memorise with
     num_layers: int = 2
-    dropout: float = 0.2
+    dropout: float = 0.4        # was 0.2 — stronger regularisation
 
     # heads
-    rul_hidden: int = 64
+    rul_hidden: int = 48
 
     # training
-    epochs: int = 100
+    epochs: int = 150           # was 100 — more room now that val can improve
     batch_size: int = 64
-    lr: float = 1e-3
-    weight_decay: float = 1e-5
-    patience: int = 15          # early-stopping patience on val RMSE
+    lr: float = 5e-4            # was 1e-3 — slower, less prone to snap-memorise
+    weight_decay: float = 5e-4  # was 1e-5 — much stronger L2
+    patience: int = 25          # was 15 — give generalisation time to appear
     grad_clip: float = 5.0
 
     seed: int = 42
@@ -155,7 +155,7 @@ class RULTrainer:
             ds, batch_size=self.cfg.batch_size, shuffle=shuffle)
 
     def fit(self, X_train, y_train, X_val, y_val,
-            stage_train=None, mask_healthy=True, verbose=True):
+            stage_train=None, stage_val=None, mask_healthy=True, verbose=True):
         """Train the baseline RUL model for one fold.
 
         Args:
@@ -163,6 +163,11 @@ class RULTrainer:
             X_val, y_val: validation windows and RUL (real, for early stopping)
             stage_train: (N,) 0-indexed stage labels for training windows.
                 Required when mask_healthy=True.
+            stage_val: (N,) 0-indexed stage labels for validation windows.
+                When provided with mask_healthy, early stopping tracks
+                validation RMSE on post-FPT windows only — the same regime the
+                model is trained on — rather than on all windows (which would
+                include healthy windows the RUL head never learned).
             mask_healthy: if True, the RUL regression loss is computed only on
                 post-FPT windows (stage index >= 1). Pre-FPT healthy windows
                 have a flat, stationary signal but a steadily changing RUL
@@ -175,6 +180,15 @@ class RULTrainer:
         cfg = self.cfg
         X = torch.as_tensor(X_train, dtype=torch.float32)
         y = torch.as_tensor(y_train, dtype=torch.float32)
+
+        # For early stopping, evaluate on post-FPT validation windows when
+        # masking, so the stopping signal matches the training objective.
+        Xv_eval, yv_eval = X_val, y_val
+        if mask_healthy and stage_val is not None:
+            vkeep = np.asarray(stage_val) >= 1
+            if vkeep.sum() > 0:
+                Xv_eval = np.asarray(X_val)[vkeep]
+                yv_eval = np.asarray(y_val)[vkeep]
 
         if mask_healthy:
             if stage_train is None:
@@ -212,7 +226,7 @@ class RULTrainer:
                 sq_err += ((pred - yb) ** 2).sum().item(); n += len(yb)
             train_rmse = (sq_err / n) ** 0.5
 
-            val_rmse = self.evaluate_rmse(X_val, y_val)
+            val_rmse = self.evaluate_rmse(Xv_eval, yv_eval)
             self.history['train_rmse'].append(train_rmse)
             self.history['val_rmse'].append(val_rmse)
 
