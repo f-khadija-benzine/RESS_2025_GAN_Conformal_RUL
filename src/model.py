@@ -154,9 +154,42 @@ class RULTrainer:
         return torch.utils.data.DataLoader(
             ds, batch_size=self.cfg.batch_size, shuffle=shuffle)
 
-    def fit(self, X_train, y_train, X_val, y_val, verbose=True):
+    def fit(self, X_train, y_train, X_val, y_val,
+            stage_train=None, mask_healthy=True, verbose=True):
+        """Train the baseline RUL model for one fold.
+
+        Args:
+            X_train, y_train: training windows and normalised RUL
+            X_val, y_val: validation windows and RUL (real, for early stopping)
+            stage_train: (N,) 0-indexed stage labels for training windows.
+                Required when mask_healthy=True.
+            mask_healthy: if True, the RUL regression loss is computed only on
+                post-FPT windows (stage index >= 1). Pre-FPT healthy windows
+                have a flat, stationary signal but a steadily changing RUL
+                label, so the mapping from window to RUL is ill-posed there;
+                including them biases the regressor toward predicting the mean
+                (and, because healthy windows carry high RUL, toward
+                over-predicting remaining life). Masking restricts the
+                regression to the regime where degradation is observable.
+        """
         cfg = self.cfg
-        tr = self._loader(X_train, y_train, shuffle=True)
+        X = torch.as_tensor(X_train, dtype=torch.float32)
+        y = torch.as_tensor(y_train, dtype=torch.float32)
+
+        if mask_healthy:
+            if stage_train is None:
+                raise ValueError("mask_healthy=True requires stage_train")
+            # post-FPT = stage index >= 1 (0=healthy, 1=early, 2=near-failure)
+            keep = np.asarray(stage_train) >= 1
+            X, y = X[keep], y[keep]
+            if verbose:
+                print(f"  RUL masking: {keep.sum()}/{len(keep)} post-FPT "
+                      f"windows kept for regression")
+
+        ds = torch.utils.data.TensorDataset(X, y)
+        tr = torch.utils.data.DataLoader(
+            ds, batch_size=cfg.batch_size, shuffle=True)
+
         opt = torch.optim.Adam(self.model.parameters(), lr=cfg.lr,
                                weight_decay=cfg.weight_decay)
         loss_fn = nn.MSELoss()
@@ -343,16 +376,20 @@ def phm_score(y_true_norm, y_pred_norm, bearing_ids):
     out = {}
     for b in np.unique(bids):
         sel = bids == b
-        # score at the failure point: the window nearest EOL (smallest true RUL)
         idx = np.where(sel)[0]
-        j = idx[np.argmin(yt[idx])]
+        # Score at the failure point: the window nearest EOL. Normalised RUL
+        # reaches 0 at EOL, which makes the percentage-error denominator
+        # undefined, so we take the window nearest EOL whose true RUL is still
+        # above a small floor.
+        cand = idx[yt[idx] >= 0.02]
+        if len(cand) == 0:
+            continue
+        j = cand[np.argmin(yt[cand])]
         true_val = yt[j]
-        if true_val <= 1e-9:
-            continue                       # avoid divide-by-zero at exact EOL
         er = 100.0 * (true_val - yp[j]) / true_val
-        if er <= 0:                        # late prediction
+        if er <= 0:                        # over-prediction (late) — penalise hard
             a = np.exp(-ln_half * er / 5.0)
-        else:                              # early prediction
+        else:                              # under-prediction (early) — penalise gently
             a = np.exp(+ln_half * er / 20.0)
         out[str(b)] = float(a)
 
