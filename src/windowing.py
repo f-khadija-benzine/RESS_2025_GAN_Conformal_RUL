@@ -36,28 +36,40 @@ N_VAL_BEARINGS = 1    # bearings held out for early stopping / model selection
 
 # ── RUL target ───────────────────────────────────────────────────────
 
-def compute_rul_normalized(n_recordings):
-    """RUL normalized to [0, 1] as fraction of life remaining.
-
-    RUL(t) = (EOL - t) / EOL
-
-    Gives 1.0 at the first recording and 0.0 at failure. Normalizing
-    per bearing is standard on XJTU-SY because raw lifetimes span
-    42–2538 minutes; an absolute target in minutes would let long-lived
-    bearings dominate the loss. It also makes RMSE directly comparable
-    to the published XJTU-SY baselines, which report normalized errors.
+def compute_rul_normalized(n_recordings, fpt=None, target='linear'):
+    
+    """Normalised RUL target for one bearing.
 
     Args:
-        n_recordings: total recordings for this bearing
+        n_recordings: total recordings (bearing lifetime in minutes)
+        fpt: First Prediction Time index (required for 'piecewise')
+        target: 'linear'    -> 1.0 at start, linear to 0.0 at EOL
+                'piecewise' -> flat at 1.0 until FPT, then linear to 0.0 at EOL
+
+    The piecewise target reflects that a bearing showing no degradation has
+    full useful life remaining; RUL only declines once degradation begins at
+    the FPT. This also makes the healthy phase learnable: every pre-FPT window
+    shares the same target (1.0), rather than being asked to distinguish
+    identical-looking windows by a slowly-ticking label.
 
     Returns:
-        1D array of shape (n_recordings,), descending from 1.0 to 0.0
+        (n_recordings,) array of normalised RUL in [0, 1]
     """
-    eol = n_recordings - 1
-    if eol == 0:
-        return np.zeros(1, dtype=np.float32)
-    t = np.arange(n_recordings, dtype=np.float32)
-    return ((eol - t) / eol).astype(np.float32)
+    if target == 'linear':
+        return np.linspace(1.0, 0.0, n_recordings, dtype=np.float32)
+
+    if target == 'piecewise':
+        if fpt is None or fpt <= 0:
+            # no valid FPT -> fall back to linear
+            return np.linspace(1.0, 0.0, n_recordings, dtype=np.float32)
+        rul = np.ones(n_recordings, dtype=np.float32)
+        # from FPT to EOL, decline linearly 1.0 -> 0.0
+        n_deg = n_recordings - fpt
+        if n_deg > 0:
+            rul[fpt:] = np.linspace(1.0, 0.0, n_deg, dtype=np.float32)
+        return rul
+
+    raise ValueError(f"unknown target: {target}")
 
 
 # ── Windowing ────────────────────────────────────────────────────────
