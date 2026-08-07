@@ -74,7 +74,8 @@ def compute_rul_normalized(n_recordings, fpt=None, target='linear'):
 
 # ── Windowing ────────────────────────────────────────────────────────
 
-def make_windows(features, stage_labels, window_size=WINDOW_SIZE, stride=STRIDE):
+def make_windows(features, stage_labels, window_size=WINDOW_SIZE, stride=STRIDE,
+                 fpt=None, rul_target='linear'):
     """Slide a fixed-length window over one bearing's feature matrix.
 
     Each window is labeled by its LAST time step: the RUL and stage at
@@ -87,6 +88,8 @@ def make_windows(features, stage_labels, window_size=WINDOW_SIZE, stride=STRIDE)
         stage_labels: (n_recordings,) integer stage labels (1, 2, 3)
         window_size: number of time steps per window
         stride: step between consecutive windows
+        fpt: First Prediction Time index (needed for rul_target='piecewise')
+        rul_target: 'linear' | 'piecewise' (see compute_rul_normalized)
 
     Returns:
         X:     (n_windows, window_size, 20) float32
@@ -101,7 +104,7 @@ def make_windows(features, stage_labels, window_size=WINDOW_SIZE, stride=STRIDE)
                 np.empty(0, dtype=np.float32),
                 np.empty(0, dtype=np.int64))
 
-    rul = compute_rul_normalized(n_rec)
+    rul = compute_rul_normalized(n_rec, fpt=fpt, target=rul_target)
 
     starts = np.arange(0, n_rec - window_size + 1, stride)
     n_win = len(starts)
@@ -423,7 +426,7 @@ def apply_scaler(X, scaler):
 # ── Fold preparation ─────────────────────────────────────────────────
 
 def prepare_fold(results, fold, window_size=WINDOW_SIZE, stride=STRIDE,
-                 scaling_method='log_clip', verbose=True):
+                 scaling_method='log_clip', rul_target='linear', verbose=True):
     """Window and split one fold into train / val / cal / test tensors.
 
     Args:
@@ -431,11 +434,13 @@ def prepare_fold(results, fold, window_size=WINDOW_SIZE, stride=STRIDE,
         fold: one dict from build_folds()
         window_size, stride: windowing parameters
         scaling_method: 'log_clip' | 'robust' | 'log_robust'
+        rul_target: 'linear' | 'piecewise' (flat 1.0 until FPT, then linear)
         verbose: print split summary
 
     Returns:
         dict with 'X_train', 'y_rul_train', 'y_stage_train', and the
-        same for _val, _cal, _test; plus 'scaler', 'scaling_method', 'fold'
+        same for _val, _cal, _test; plus 'scaler', 'scaling_method',
+        'rul_target', 'fold'
     """
     split_data = {}
 
@@ -445,8 +450,10 @@ def prepare_fold(results, fold, window_size=WINDOW_SIZE, stride=STRIDE,
             if bid not in results:
                 continue
             r = results[bid]
+            fpt = r.get('fpt_idx', None)     # FPT stored by health_indicator as 'fpt_idx'
             X, y_rul, y_stage = make_windows(
-                r['features'], r['stage_labels'], window_size, stride)
+                r['features'], r['stage_labels'], window_size, stride,
+                fpt=fpt, rul_target=rul_target)
             if len(X) == 0:
                 if verbose:
                     print(f"  ! {bid} skipped: shorter than window ({window_size})")
@@ -471,7 +478,7 @@ def prepare_fold(results, fold, window_size=WINDOW_SIZE, stride=STRIDE,
     scaler = fit_scaler(split_data['train'][0], method=scaling_method)
 
     out = {'fold': fold['fold'], 'scaler': scaler,
-           'scaling_method': scaling_method}
+           'scaling_method': scaling_method, 'rul_target': rul_target}
     for split in ('train', 'val', 'cal', 'test'):
         X, y_rul, y_stage = split_data[split]
         out[f'X_{split}'] = apply_scaler(X, scaler)
@@ -493,16 +500,17 @@ def prepare_fold(results, fold, window_size=WINDOW_SIZE, stride=STRIDE,
 
 
 def prepare_all_folds(results, window_size=WINDOW_SIZE, stride=STRIDE,
-                      scaling_method='log_clip', verbose=True):
+                      scaling_method='log_clip', rul_target='linear', verbose=True):
     """Prepare all 5 folds using stage-aware calibration selection.
 
     Args:
         scaling_method: 'log_clip' | 'robust' | 'log_robust'
+        rul_target: 'linear' | 'piecewise'
 
     Returns:
         list of 5 fold dicts from prepare_fold()
     """
     folds = build_folds(results)
     return [prepare_fold(results, f, window_size, stride,
-                         scaling_method, verbose)
+                         scaling_method, rul_target, verbose)
             for f in folds]
