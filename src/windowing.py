@@ -75,7 +75,7 @@ def compute_rul_normalized(n_recordings, fpt=None, target='linear'):
 # ── Windowing ────────────────────────────────────────────────────────
 
 def make_windows(features, stage_labels, window_size=WINDOW_SIZE, stride=STRIDE,
-                 fpt=None, rul_target='linear'):
+                 fpt=None, rul_target='piecewise'):
     """Slide a fixed-length window over one bearing's feature matrix.
 
     Each window is labeled by its LAST time step: the RUL and stage at
@@ -426,7 +426,7 @@ def apply_scaler(X, scaler):
 # ── Fold preparation ─────────────────────────────────────────────────
 
 def prepare_fold(results, fold, window_size=WINDOW_SIZE, stride=STRIDE,
-                 scaling_method='log_clip', rul_target='linear', verbose=True):
+                 scaling_method='log_clip', rul_target='piecewise', verbose=True):
     """Window and split one fold into train / val / cal / test tensors.
 
     Args:
@@ -500,7 +500,7 @@ def prepare_fold(results, fold, window_size=WINDOW_SIZE, stride=STRIDE,
 
 
 def prepare_all_folds(results, window_size=WINDOW_SIZE, stride=STRIDE,
-                      scaling_method='log_clip', rul_target='linear', verbose=True):
+                      scaling_method='log_clip', rul_target='piecewise', verbose=True):
     """Prepare all 5 folds using stage-aware calibration selection.
 
     Args:
