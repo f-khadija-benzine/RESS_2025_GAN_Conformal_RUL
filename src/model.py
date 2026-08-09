@@ -433,3 +433,153 @@ def cumulative_rmse(per_bearing, prognostic_durations):
     weights = np.array([prognostic_durations[b] for b in ids], dtype=float)
     rmses = np.array([per_bearing[b] for b in ids], dtype=float)
     return float(np.sum(weights * rmses) / np.sum(weights))
+
+
+# ── Standard evaluation grid ─────────────────────────────────────────
+
+# Stage index convention (0-indexed, as stored in y_stage):
+#   0 = healthy (S1) | 1 = early (S2) | 2 = near-failure (S3)
+_STAGE_ROWS = [('healthy', [0]), ('early', [1]), ('nearfail', [2]),
+               ('postFPT', [1, 2]), ('overall', [0, 1, 2])]
+
+
+def evaluate_grid(y_true, y_pred, stages, bearing_ids):
+    """Standard normalised-RMSE grid for one fold, computed two ways.
+
+    For each window subset (healthy / early / near-failure / post-FPT /
+    overall) returns RMSE on the normalised RUL, computed both:
+
+      pooled       : all windows in the subset thrown together (weights each
+                     WINDOW equally; long bearings dominate).
+      per_bearing  : RMSE per bearing, then averaged (weights each BEARING
+                     equally; matches the XJTU-SY literature).
+
+    Args:
+        y_true, y_pred: (N,) normalised RUL
+        stages: (N,) 0-indexed stage labels (0/1/2)
+        bearing_ids: (N,) bearing identifier per window
+
+    Returns:
+        dict: {subset: {'pooled': rmse, 'per_bearing': rmse, 'n': n_windows}}
+    """
+    yt = np.asarray(y_true, float)
+    yp = np.asarray(y_pred, float)
+    st = np.asarray(stages)
+    bids = np.asarray(bearing_ids)
+
+    def rmse(a, b):
+        return float(np.sqrt(np.mean((a - b) ** 2))) if len(a) else float('nan')
+
+    grid = {}
+    for name, stage_vals in _STAGE_ROWS:
+        sel = np.isin(st, stage_vals)
+        n = int(sel.sum())
+        if n == 0:
+            grid[name] = {'pooled': float('nan'),
+                          'per_bearing': float('nan'), 'n': 0}
+            continue
+        pooled = rmse(yp[sel], yt[sel])
+        # per-bearing: RMSE for each bearing present in this subset, then mean
+        per = []
+        for b in np.unique(bids[sel]):
+            bsel = sel & (bids == b)
+            if bsel.sum() > 0:
+                per.append(rmse(yp[bsel], yt[bsel]))
+        per_bearing = float(np.mean(per)) if per else float('nan')
+        grid[name] = {'pooled': pooled, 'per_bearing': per_bearing, 'n': n}
+    return grid
+
+
+def print_grid(grid, title=''):
+    """Pretty-print one fold's evaluation grid."""
+    if title:
+        print(title)
+    print(f"  {'subset':10s} {'n':>6s} {'pooled':>10s} {'per-bearing':>12s}")
+    print(f"  {'-'*40}")
+    for name, _ in _STAGE_ROWS:
+        g = grid[name]
+        print(f"  {name:10s} {g['n']:6d} {g['pooled']:10.4f} "
+              f"{g['per_bearing']:12.4f}")
+
+
+def average_grids(grids):
+    """Average a list of per-fold grids into one grid (mean over folds).
+
+    Each subset's pooled / per_bearing RMSE is averaged across folds. This is
+    the standard 5-fold cross-validated result to report.
+    """
+    out = {}
+    for name, _ in _STAGE_ROWS:
+        pooled = np.nanmean([g[name]['pooled'] for g in grids])
+        perb = np.nanmean([g[name]['per_bearing'] for g in grids])
+        ntot = int(np.sum([g[name]['n'] for g in grids]))
+        out[name] = {'pooled': float(pooled),
+                     'per_bearing': float(perb), 'n': ntot}
+    return out
+
+
+# ═════════════════════════════════════════════════════════════════════
+#  RESULTS CONSISTENCY CONTRACT  — read before adding any new evaluation
+# ═════════════════════════════════════════════════════════════════════
+#
+#  Every experiment (baseline, +GAN, +oversample, +multitask, conformal)
+#  MUST report results through the SAME functions so numbers are
+#  comparable across notebooks and across the paper. Do not hand-roll
+#  stage splits or ad-hoc RMSE in a notebook cell — call these:
+#
+#    evaluate_grid(y_true, y_pred, stages, bearing_ids)
+#        -> normalised-RMSE grid, 5 subsets x {pooled, per_bearing}
+#        subsets: healthy / early / nearfail / postFPT / overall
+#    print_grid(grid, title)          -> standard printout
+#    average_grids([grids])           -> mean over folds
+#    secondary_metrics(...)           -> PHM score, cumulative-min, R2
+#
+#  ALWAYS state three things with any number: SCALE (normalised [0,1] or
+#  minutes), SUBSET (which of the 5 rows), AGGREGATION (pooled or
+#  per-bearing). The paper's primary table is the per_bearing column of
+#  the grid; pooled is kept for diagnosis. Secondary metrics go in a
+#  SEPARATE table with explicit units.
+#
+#  RUN-TO-RUN NOISE: LSTM training on GPU is non-deterministic. A single
+#  run's RMSE wobbles by roughly +/-0.02-0.03. Before claiming any config
+#  beats another, run MULTIPLE SEEDS and report mean +/- std; a difference
+#  smaller than the std is not a real effect.
+# ═════════════════════════════════════════════════════════════════════
+
+
+def secondary_metrics(y_true_norm, y_pred_norm, stages, bearing_ids,
+                      lifetimes_min, prognostic_durations=None):
+    """Secondary metrics, reported once per configuration (units explicit).
+
+    Returns a dict with:
+      r2                : R^2 on normalised RUL, post-FPT windows (the regime
+                          the model is meant to predict)
+      phm_score         : PHM 2012 score (higher better, penalises late harder)
+      cumulative_min    : dT-weighted per-bearing RMSE in MINUTES, post-FPT,
+                          directly comparable to Lu et al. (needs
+                          prognostic_durations {bearing_id: dT}); else nan
+    """
+    yt = np.asarray(y_true_norm, float)
+    yp = np.asarray(y_pred_norm, float)
+    st = np.asarray(stages)
+    bids = np.asarray(bearing_ids)
+    life = np.asarray(lifetimes_min, float)
+
+    post = st >= 1
+    # R2 on post-FPT
+    if post.sum() > 1:
+        ss_res = np.sum((yt[post] - yp[post]) ** 2)
+        ss_tot = np.sum((yt[post] - yt[post].mean()) ** 2)
+        r2 = float(1 - ss_res / ss_tot) if ss_tot > 0 else float('nan')
+    else:
+        r2 = float('nan')
+
+    sc = phm_score(yt, yp, bids).get('_score', float('nan'))
+
+    cum = float('nan')
+    if prognostic_durations is not None:
+        pb = per_bearing_rmse(yt, yp, bids, life,
+                              stages=st + 1, post_fpt_only=True)
+        cum = cumulative_rmse(pb, prognostic_durations)
+
+    return {'r2': r2, 'phm_score': sc, 'cumulative_min': cum}
