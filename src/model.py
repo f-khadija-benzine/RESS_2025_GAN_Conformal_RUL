@@ -124,13 +124,13 @@ class RULModel(nn.Module):
             nn.ReLU(inplace=True),
             nn.Dropout(cfg.dropout),
             nn.Linear(cfg.rul_hidden, 1),
-            nn.Sigmoid(),                     # RUL target is normalised to [0, 1]
+                                # RUL target is normalised to [0, 1]
         )
 
     def forward(self, x):
-        context, attn_w = self.encoder(x)
-        rul = self.rul_head(context).squeeze(-1)   # (B,)
-        return rul
+     context, attn_w = self.encoder(x)
+     rul = self.rul_head(context).squeeze(-1)
+     return rul.clamp(0.0, 1.0)   # clamp instead of sigmoid — can actually reach 0 and 1
 
 
 # ── Training / evaluation ────────────────────────────────────────────
