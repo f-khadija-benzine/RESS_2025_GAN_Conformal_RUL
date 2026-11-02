@@ -1,0 +1,102 @@
+% ============================================================
+%  Section 4.x — Implementation Details and Evaluation Protocol
+%  Goes at the END of Section 4 (Experimental Setup), after the
+%  partitioning subsection. Holds every hyperparameter and metric
+%  definition, so that Section 3 stays generic.
+%  Values verified against src/gan.py, src/model.py,
+%  src/multitask.py, src/conformal.py and notebooks 04 / 08.
+% ============================================================
+
+\subsection{Implementation Details and Evaluation Protocol}
+\label{sec:implementation}
+
+The framework of Section~\ref{sec:methodology} is instantiated on
+XJTU-SY with the values listed in Table~\ref{tab:hyperparams}. The
+staging parameters of Eqs.~\eqref{eq:fpt_threshold}--\eqref{eq:fpt}
+are those motivated in Section~\ref{sec:hi_staging}: the baseline is
+estimated over the first $\eta = 20\%$ of each bearing's life, the
+relative floor is $\rho = 0.20$, and the persistence length is $m = 5$
+recordings. Windows contain $w = 32$ recordings of $d = 20$ features.
+The augmentation ratio $r = 0.75$ and the stage-loss weight
+$\lambda = 1.0$ were selected on preliminary runs over
+$r \in \{0.25, 0.5, 0.75, 1.0\}$ and $\lambda \in \{0.3, 0.5, 1.0\}$.
+
+\begin{table}[htbp]
+\centering
+\caption{Hyperparameters of the framework components.}
+\label{tab:hyperparams}
+\footnotesize
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lll}
+\toprule
+\textbf{Component} & \textbf{Setting} & \textbf{Value} \\
+\midrule
+\multirow{8}{*}{C1 (generator, critic)}
+ & Noise dimension & 64 \\
+ & Conv.\ channels / kernel & 128 / 5 \\
+ & BiLSTM units per direction & 128 \\
+ & Optimiser, learning rate & Adam, $10^{-4}$ \\
+ & Adam $(\beta_1, \beta_2)$ & $(0.5, 0.9)$ \\
+ & Batch size / epochs & 64 / 300 \\
+ & Critic steps $n_{\mathrm{c}}$ & 3 \\
+ & Penalty weight $\lambda_{\mathrm{gp}}$ & 10 \\
+\midrule
+\multirow{8}{*}{C2 (predictor)}
+ & BiLSTM layers / units & 2 / 48 \\
+ & Head hidden units & 48 \\
+ & Dropout & 0.4 \\
+ & Optimiser, learning rate & Adam, $5 \times 10^{-4}$ \\
+ & Weight decay & $5 \times 10^{-4}$ \\
+ & Batch / max.\ epochs / patience & 64 / 100 / 25 \\
+ & Gradient clipping (norm) & 5.0 \\
+ & Stage-loss weight $\lambda$ & 1.0 \\
+\midrule
+Augmentation & Ratio $r$ & 0.75 \\
+C3 (conformal) & Miscoverage $\alpha$ & 0.10\textsuperscript{a} \\
+\bottomrule
+\end{tabular}
+
+\vspace{2pt}
+\raggedright\scriptsize \textsuperscript{a}Headline level; 0.05, 0.15
+and 0.20 are also evaluated.
+\end{table}
+
+All models were implemented in PyTorch and trained on a single NVIDIA
+T4 GPU. Recurrent training on the GPU is not bit-wise reproducible,
+and the RUL error of a given configuration was observed to vary by
+about $\pm 0.015$--$0.02$ in normalised units from one run to the
+next. Every configuration is therefore trained under five random seeds
+in each of the five folds, and results are reported as the mean and
+standard deviation over seeds. A difference smaller than this
+seed-to-seed variability is not interpreted as an effect.\\
+
+Point accuracy is measured by the root mean square error on the
+normalised RUL scale. It is computed for each test bearing and then
+averaged over bearings, so that the long-lived bearings, which supply
+most of the windows, do not dominate the result:
+\begin{equation}
+  \mathrm{RMSE} = \frac{1}{|\mathcal{B}_{\mathrm{te}}|}
+  \sum_{b \in \mathcal{B}_{\mathrm{te}}}
+  \sqrt{ \frac{1}{|\mathcal{W}_b|} \sum_{t \in \mathcal{W}_b}
+  \left( \hat{y}^{b}_{t} - y^{b}_{t} \right)^2 } ,
+  \label{eq:rmse}
+\end{equation}
+where $\mathcal{W}_b$ is the set of evaluated windows of bearing $b$.
+Interval quality is measured by the prediction interval coverage
+probability and the mean prediction interval width,
+\begin{equation}
+  \mathrm{PICP} = \frac{1}{n} \sum_{i=1}^{n}
+  \mathbb{1}\left\{ y_i \in \hat{C}(\mathbf{X}_i) \right\},
+  \qquad
+  \mathrm{MPIW} = \frac{1}{n} \sum_{i=1}^{n}
+  \left| \hat{C}(\mathbf{X}_i) \right| ,
+  \label{eq:picp_mpiw}
+\end{equation}
+computed over the test windows of each fold and averaged over folds.
+PICP should lie at or slightly above the nominal level $1-\alpha$, and
+a smaller MPIW is preferable only when PICP is maintained; the two
+are therefore always reported together. All three metrics are
+reported separately for the healthy, early-degradation and
+near-failure stages, and for the post-FPT and complete trajectories.
+The near-failure stage is the primary subset, as it is the regime that
+motivates the framework and determines maintenance decisions.

@@ -221,3 +221,68 @@ def average_conformal_mondrian(results):
             'n': int(np.sum([r[name]['n'] for r in results])),
         }
     return out
+
+
+# ── Mondrian conformal with a predicted (deployable) stage ──────────
+
+
+def calibrate_and_evaluate_mondrian_pred(y_cal_true, y_cal_pred, cal_stage_hat,
+                                         y_test_true, y_test_pred,
+                                         test_stage_hat, test_stage_true,
+                                         alpha=0.1):
+    """Mondrian conformal with a deployable (predicted) stage assignment.
+
+Add this function to src/conformal.py (below calibrate_and_evaluate_mondrian).
+
+Why: calibrate_and_evaluate_mondrian picks each test window's quantile with
+its TRUE stage. True stages come from the FPT and the acceleration point,
+which can only be located once the whole run-to-failure trajectory is known,
+so they are not available when the model is used on a running bearing.
+
+Here the stage used to group calibration residuals AND to pick the test
+quantile is the predicted stage s_hat(X), a function of the input window
+only. Mondrian conformal is valid for any grouping that is a function of the
+input, so coverage >= 1 - alpha holds within each PREDICTED stage. Results
+are still reported by TRUE stage (healthy / early / near-failure), which is
+the subset the paper discusses; those numbers are empirical, not guaranteed.
+    """
+    yct = np.asarray(y_cal_true, float); ycp = np.asarray(y_cal_pred, float)
+    csh = np.asarray(cal_stage_hat)
+    ytt = np.asarray(y_test_true, float); ytp = np.asarray(y_test_pred, float)
+    tsh = np.asarray(test_stage_hat); tst = np.asarray(test_stage_true)
+
+    # one quantile per PREDICTED stage, from calibration windows assigned to it
+    q_by_stage = {}
+    for s in (0, 1, 2):
+        m = csh == s
+        if m.sum() == 0:
+            q_by_stage[s] = float('nan')
+            continue
+        q_by_stage[s], _ = conformal_quantile(np.abs(yct[m] - ycp[m]), alpha)
+
+    # each test window gets the quantile of its predicted stage
+    q_test = np.array([q_by_stage.get(int(s), np.nan) for s in tsh])
+    covered = np.abs(ytt - ytp) <= q_test
+    width = 2 * q_test
+
+    subsets = [('healthy', [0]), ('early', [1]), ('nearfail', [2]),
+               ('postFPT', [1, 2]), ('overall', [0, 1, 2])]
+    out = {'q_by_stage': q_by_stage, 'alpha': alpha,
+           'stage_acc_test': float(np.mean(tsh == tst)),
+           # near-failure windows the classifier sends to another stage
+           'nf_missed_rate': float(np.mean(tsh[tst == 2] != 2)) if (tst == 2).any() else float('nan')}
+    for name, vals in subsets:
+        sel = np.isin(tst, vals)                       # report by TRUE stage
+        n = int(sel.sum())
+        if n == 0:
+            out[name] = {'picp': float('nan'), 'mpiw': float('nan'), 'n': 0, 'q': float('nan')}
+        else:
+            out[name] = {'picp': float(covered[sel].mean()),
+                         'mpiw': float(np.nanmean(width[sel])),
+                         'n': n, 'q': float(np.nanmean(q_test[sel]))}
+    # guaranteed subsets: by PREDICTED stage
+    for s, name in zip((0, 1, 2), ('pred_healthy', 'pred_early', 'pred_nearfail')):
+        sel = tsh == s
+        out[name] = {'picp': float(covered[sel].mean()) if sel.any() else float('nan'),
+                     'n': int(sel.sum())}
+    return out
