@@ -1,0 +1,61 @@
+% ============================================================
+%  Benchmark comparison table — belongs in RESULTS / DISCUSSION,
+%  not Related Work. Place it after the point-accuracy and
+%  conformal-coverage results are defined.
+% ============================================================
+
+\begin{table*}[!htbp]
+\centering
+\caption{Reported RUL prediction results on the XJTU-SY bearing
+dataset. ``NR'' marks a protocol detail not explicitly stated in the
+source, which precludes strict comparability. The absolute normalised
+RMSE values span an order of magnitude for the same dataset,
+reflecting unstandardised evaluation protocols rather than genuine
+performance differences; the proposed value is reported for the
+near-failure regime specifically, the hardest and most safety-critical,
+and is the only entry qualified by its scale, label, scoring window,
+and aggregation together with coverage-guaranteed intervals.}
+\label{tab:benchmark}
+\footnotesize
+\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{llcccccl}
+\toprule
+\textbf{Study} & \textbf{Method} & \textbf{RMSE} & \textbf{Unit} &
+\textbf{Label} & \textbf{Window} & \textbf{Aggreg.} &
+\textbf{Uncertainty (PICP/MPIW)} \\
+\midrule
+\multicolumn{8}{l}{\textit{Point-prediction methods (absolute normalised RMSE)}}\\
+Jin et al.~\cite{app15179529}        & EMD--BiLSTM--Transf. & 0.044 & norm. & NR & NR & NR & none \\
+Zhang et al.~\cite{11682466}         & WI-DSNAS-SS          & 0.054 & norm. & NR & NR & NR & none \\
+Kumar et al.~\cite{machines14060672} & PPO                  & 0.069\textsuperscript{a} & norm. & piecew. & post-FPT & NR & none \\
+An et al.~\cite{10935355}            & ILDENet              & 0.082 & norm. & NR & NR & NR & none \\
+Feng et al.~\cite{FENG2026105865}    & RRDT--DCDTN          & 0.098 & norm. & NR & NR & per-bear. & none \\
+zheng et al.~\cite{10423873}         & ResNet-AE--TD3       & 0.142 & norm. & NR & NR & NR & none \\
+Qiao et al.~\cite{QIAO2026112248}    & DM-SVW               & 0.16  & norm. & NR & post-FPT & per-bear. & none \\
+Luo et al.~\cite{11637655}           & CNN--TCN             & 0.171 & norm. & NR & NR & per-bear. & none \\
+\midrule
+\multicolumn{8}{l}{\textit{Relative-improvement methods (no absolute comparable RMSE)}}\\
+Lu et al.~\cite{9486650}             & GAN-LSTM             & \multicolumn{4}{l}{$-29\%$ vs LSTM (rel.)}       & time-wt. & none \\
+Lu et al.~\cite{lu_joint_2022}       & HP-JT                & \multicolumn{4}{l}{$-29.4\%$ vs HP (minutes)}    & time-wt. & Gaussian layer \\
+Tang et al.~\cite{10555355}          & CD-CI                & \multicolumn{4}{l}{$-52\%$ vs CNN-LSTM (rel.)}   & NR & 95\% bands (NR) \\
+\midrule
+\multicolumn{8}{l}{\textit{Uncertainty-aware methods (coverage comparators)}}\\
+Zhang et al.~\cite{zhang_explainable_2025}     & E-GTQN      & NR & NR & NR & NR & NR & quantile+KDE: 0.940 cov. \\
+Wang et al.~\cite{wang_uncertainty-aware_2026} & VAE-Transf.\ conf. & NR & norm. & NR & NR & NR & \textbf{conformal: 0.945 / 0.924} \\
+Bott et al.~\cite{11373138}          & Phys.-sim.+CNF conf. & 0.106\textsuperscript{b} & norm. & NR & whole & NR & \textbf{conformal: 0.919 / 0.654} \\
+\midrule
+\rowcolor[RGB]{198,224,180}
+\textbf{Proposed} & \textbf{GAN + MT BiLSTM + Mondrian conf.} &
+\textbf{0.219}\textsuperscript{c} & \textbf{norm.} & \textbf{piecew.} &
+\textbf{post-FPT} & \textbf{per-bear.} & \textbf{conformal: 0.885 / 0.66} \\
+\bottomrule
+\end{tabular}
+
+\vspace{3pt}
+\raggedright\scriptsize
+\textsuperscript{a}within-bearing late-test tail only.
+\textsuperscript{b}derived from the reported MSE; synthetic-trained tabular predictor.
+\textsuperscript{c}near-failure stage specifically; the overall-stage value is 0.216.
+norm.: normalised. rel.: relative. conf.: conformal. cov.: coverage.
+\end{table*}

@@ -1,0 +1,760 @@
+\section{Related work}
+
+\subsection{Deep Learning for Remaining Useful Life Prediction}
+\label{sec:dl_rul}
+
+Remaining useful life prediction methods can generally be grouped
+into two broad categories~\cite{shang_capsule_2024, bai_towards_2024}.
+The first, model-based methods, relies on mathematical modeling of
+the physical degradation process and system dynamics. These approaches
+are grounded in physics-based reasoning and offer accurate
+threshold-based failure prediction under well-understood conditions.
+However, the growing complexity of modern rotating machinery has made
+it increasingly difficult to formulate accurate degradation models,
+especially when the underlying mechanisms are non-linear or not fully
+observable~\cite{heimes_recurrent_2008}. Moreover, model-based methods
+often lack flexibility in adapting to diverse fault types and
+operational conditions~\cite{shang_capsule_2024}. The second category,
+data-driven methods, bypass this difficulty by learning
+degradation patterns directly from sensor data, requiring less
+domain-specific expertise and enabling rapid deployment without full
+knowledge of the physical system~\cite{datadriven,
+heimes_recurrent_2008}. Their performance, however, is strongly
+conditioned on the volume, quality, and representativeness of the
+available training data, a dependency that becomes critical in
+industrial prognostics where run-to-failure experiments are both costly
+and time-consuming~\cite{s25144481, pan2025remaining}.\\
+
+Within the data-driven paradigm, early efforts relied on shallow
+machine learning algorithms such as Artificial Neural
+Networks~\cite{KHATIR2020102554}, Support Vector
+Machines~\cite{TRAN2012320}, Random Forests~\cite{7508982randomforest},
+and Hidden Markov Models~\cite{articleHiddenmarkov} for RUL estimation.
+While these methods yielded promising initial results, they often
+struggled to effectively handle the noisy, high-dimensional, and
+temporally dependent nature of industrial sensor data. To address
+these limitations, deep learning techniques were introduced into
+the RUL prediction field. Convolutional Neural Networks (CNNs) were
+among the earliest adopted, exploiting sliding-window representations
+for spatial feature extraction from multivariate time series. Despite
+their effectiveness in capturing local patterns, CNNs struggle to
+retain long-range temporal dependencies, which are essential for
+modeling the sequential nature of degradation
+monitoring~\cite{shang_capsule_2024, pan2025remaining}. Recurrent
+Neural Networks (RNNs) addressed this limitation through feedback
+loops and internal memory states~\cite{articleRNNRUL}, enabling them
+to approximate non-linear temporal dynamics. However, traditional RNNs
+suffer from vanishing gradient issues that impair their ability to
+learn long-term dependencies which is a key requirement in RUL
+estimation~\cite{heimes_recurrent_2008}. Long Short-Term Memory
+(LSTM) networks were subsequently introduced and rapidly adopted
+for RUL prediction tasks, preserving information over longer time
+horizons through gated mechanisms~\cite{inproceedingsLSTM}. Standard
+LSTM architectures, however, tend to prioritize information from the
+later parts of the input sequence, potentially ignoring critical
+early-stage degradation signals that are often informative for bearing
+prognostics~\cite{bai_towards_2024}.\\
+
+To capture degradation dynamics in both temporal directions,
+Bidirectional LSTM (BiLSTM) networks have emerged as a particularly
+effective architecture for RUL estimation.
+Ghavidel et al.~\cite{ghavidel_remaining_2026} conducted a
+comparative evaluation of CNN, GRU, Transformer, and BiLSTM
+architectures on bearing vibration data, demonstrating that BiLSTM
+achieves the highest accuracy by capturing dependencies in both
+forward and backward temporal directions. This finding is consistent
+with recent bearing-specific architectures:
+Wan et al.~\cite{wan_robust_2026} proposed a CNN-BiLSTM-TCN hybrid
+that integrates spatial feature extraction, bidirectional temporal
+modeling, and long-range dependency capture for bearing RUL on the
+PRONOSTIA dataset;
+Deng et al.~\cite{DENG2026112193} developed a collaborative
+domain-adaptation bidirectional temporal convolution network validated
+across multiple operating conditions on the XJTU-SY and PHM~2012
+datasets; and
+Liu et al.~\cite{liu_deep_2026} proposed a BiLSTM with self-attention
+and a Bayesian linear layer for cross-domain bearing RUL prediction on
+XJTU-SY. More recent work has explored
+hybrid architectures that integrate recurrent and Transformer
+components. Jiang et al.~\cite{s26051578} combined an extended LSTM
+(xLSTM) with multi-head attention for bearing RUL prediction on
+XJTU-SY, while
+Yuntian et al.~\cite{YONGXING2026104313} introduced a temporal
+self-attention mechanism within a dual-branch transfer network on the
+same dataset. The attention mechanism
+allows the model to dynamically weight the importance of individual
+time steps, focusing on the most informative portions of the
+degradation trajectory rather than treating all observations
+uniformly. Several comprehensive reviews confirm the effectiveness
+of these architectural trends: Tang et al.~\cite{tang_deep_2025}
+reviewed deep learning-based hybrid models for bearing RUL
+forecasting and identified attention-augmented recurrent architectures
+as the current state of the art, while
+Palaniappan et al.~\cite{palaniappan_systematic_2026} systematically
+examined AI-based approaches across multiple bearing benchmark datasets
+and reached a similar conclusion regarding the superiority of hybrid
+deep learning models.\\
+
+Although these architectures are frequently evaluated on the XJTU-SY
+benchmark, their reported errors are difficult to compare directly. A
+survey of recent XJTU-SY studies reveals normalised RMSE values
+spanning an order of magnitude, from below 0.05 to above
+0.17~\cite{QIAO2026112248, YONGXING2026104313}, a spread that cannot
+reflect genuine differences in predictive capability alone. It arises
+instead from unstandardised evaluation protocols: studies differ in
+whether the RUL target is linear or piecewise, whether the error is
+scored over the whole life or only after degradation onset, whether it
+is pooled over windows or averaged per bearing, and which bearings are
+held out for testing. These choices are frequently left unstated, so
+that a single headline number conveys little without its accompanying
+protocol. This observation motivates the explicit reporting convention
+adopted in this work, in which every reported error is qualified by its
+scale, scoring window, and aggregation, so that it can be interpreted
+unambiguously against the literature.\\
+
+Despite these architectural advances, a fundamental limitation
+persists: the performance of all data-driven models is ultimately
+bounded by the quantity and distribution of the available training
+data. In bearing prognostics, run-to-failure experiments are costly,
+time-consuming, and yield predominantly healthy-state observations;
+the critical near-failure degradation regime, where accurate RUL
+prediction matters most for maintenance safety, is systematically
+underrepresented. This class imbalance has been identified as a
+major open challenge across the literature.
+Yang et al.~\cite{YANG2026114614} explicitly noted that insufficient
+degradation data leads to overfitting and limits model generalization,
+proposing a bilevel meta-task correlation network to address the
+resulting few-shot learning problem on XJTU-SY.
+Ji et al.~\cite{ji_semi-supervised_2026} observed that most deep
+learning methods depend on supervised learning and that their accuracy
+degrades substantially when labeled failure data is insufficient,
+motivating a semi-supervised approach. Several reviews echo this
+concern: Li et al.~\cite{s25144481} emphasized that collecting fault
+data is time-consuming and costly, as some equipment cannot be allowed
+to run to failure; Chao et al.~\cite{machines14040412} noted that
+real-world PHM datasets are sparse, noisy, and highly imbalanced, with
+limited availability of labeled failure histories; and
+Jin et al.~\cite{jin_graph_2025} identified the long and
+unpredictable degradation process of bearings as a fundamental barrier
+to obtaining comprehensive training data, recommending data
+augmentation and transfer learning as potential solutions.
+Existing approaches to this problem include transfer learning across
+operating conditions~\cite{DENG2026112193, YONGXING2026104313},
+semi-supervised learning leveraging unlabeled
+data~\cite{ji_semi-supervised_2026}, and meta-learning for few-shot
+generalization~\cite{YANG2026114614}. However, none of these
+strategies directly address the root cause: the absence of
+sufficient near-failure training samples that faithfully represent
+the degradation trajectories preceding failure. This observation
+motivates the generative data augmentation approach developed in
+Section~\ref{sec:gan_augmentation}, which specifically targets the
+underrepresented near-failure regime through stage-conditioned
+synthetic data generation.\\
+
+A second limitation, closely related to the first, concerns the
+absence of uncertainty quantification in the majority of reviewed deep
+learning architectures. Most produce deterministic point estimates of
+RUL with no accompanying confidence bounds.
+Rathi et al.~\cite{rathi2026reliability} explicitly noted the need
+for a unified framework integrating uncertainty quantification for
+robust RUL prediction, and
+Palaniappan et al.~\cite{palaniappan_systematic_2026} identified the
+lack of probabilistic methods and interpretability as a critical gap
+limiting the practical deployment of AI-based bearing prognostics.
+From a maintenance decision-making perspective, a point estimate of
+RUL without a calibrated prediction interval is insufficient for
+risk-informed scheduling: knowing that a bearing has an estimated
+RUL of 35~cycles carries fundamentally different operational
+implications depending on whether the true value lies between 30 and
+40 or between 10 and 60. This gap motivates the uncertainty quantification
+framework presented in Section~\ref{sec:uq_rul}, which
+reviews existing approaches to providing calibrated prediction
+intervals for RUL estimation.
+
+
+% ============================================================
+%  Section 2.2 — GAN-Based Data Augmentation for RUL Prediction
+% ============================================================
+
+\subsection{GAN-Based Data Augmentation for RUL Prediction}
+\label{sec:gan_augmentation}
+
+As established in Section~\ref{sec:dl_rul}, the performance of
+data-driven RUL models is fundamentally constrained by the scarcity
+of near-failure training data. Generative Adversarial Networks (GANs)
+have emerged as a promising solution to this problem, synthesizing
+realistic degradation trajectories that augment the training set and
+improve prediction accuracy. This section reviews the current
+landscape of GAN-based augmentation for RUL prediction and identifies
+three specific limitations of existing approaches that the proposed
+framework addresses.\\
+
+The effectiveness of GAN augmentation for RUL has been demonstrated
+across diverse equipment domains and GAN architectures.
+Lu et al.~\cite{9486650} proposed a jointly trained GAN-LSTM
+predictor on the XJTU-SY bearing dataset, where the generator,
+discriminator, and health predictor are trained simultaneously rather
+than sequentially, achieving a 29\% RMSE reduction over a baseline
+LSTM with statistical significance ($p = 2.26 \times 10^{-16}$).
+In a follow-up study, Lu et al.~\cite{lu_joint_2022} extended this
+framework with a Gaussian output layer for uncertainty estimation,
+reducing the RMSE by 29.4\% and the MAE by 25\% on the same dataset.
+Wang et al.~\cite{vibration7020029} combined a Variational
+Autoencoder with a GAN (VAE-GAN) and employed Dynamic Time Warping
+(DTW) for similarity-based weighting between generated and real
+degradation trajectories, demonstrating approximately 20\%
+improvement on the XJTU-SY, IMS, and pantograph datasets.
+Wen et al.~\cite{wen_gru-ae-wiener_2024} proposed a Loop-GAN
+architecture for bearing prognostics on both PHM~2012 and XJTU-SY,
+while Cheng et al.~\cite{cheng_remaining_2023} developed a GAN with
+deep autoencoder structure (GAN-DAE) for cross-condition bearing RUL
+prediction on XJTU-SY. Beyond bearing applications,
+Behera and Misra~\cite{behera_generative_2021} applied a Conditional
+GAN with a Deep GRU predictor to the C-MAPSS turbofan dataset,
+reporting at least 15\% accuracy improvement, and
+Zhang et al.~\cite{9300234} proposed a Convolutional Recurrent GAN
+(CR-GAN) that achieved 21--33\% error reduction across two
+aero-engine operating conditions and complete error elimination for
+lithium-ion battery systems. Several systematic reviews confirm the
+general effectiveness of GAN augmentation for prognostics, with
+reported improvements ranging from 15\% to over
+50\%~\cite{11129693, khan_generative_2025, nieminen_synthetic_2026}.
+It should be noted, however, that these reported gains are almost
+invariably expressed as relative reductions against a study-specific
+baseline rather than as absolute, protocol-qualified errors, which,
+as noted in Section~\ref{sec:dl_rul}, limits their comparability
+across studies.\\
+
+Despite these encouraging results, a first limitation of the existing
+literature concerns the representation of the input data fed to the
+generative model. The majority of GAN-based RUL studies operate on a
+\textit{scalar health indicator} (HI) rather than on raw multivariate
+sensor sequences. Lu et al.~\cite{9486650, lu_joint_2022} compress
+the full vibration signal into a single velocity-domain RMS value
+before applying the GAN; Wang et al.~\cite{vibration7020029} extract
+statistical features (mean square, variance, root mean square
+amplitude) and generate scalar HI trajectories; and
+Cheng et al.~\cite{cheng_remaining_2023} operate on processed
+frequency-domain features rather than raw signals. This compression
+discards the cross-sensor correlations that characterize multivariate
+degradation dynamics---correlations between horizontal and vertical
+vibration channels, between vibration and temperature, or between
+sensors at different measurement points. Only a minority of studies
+operate on multivariate sequences directly: Zhang et al.~\cite{9300234}
+use 14 sensor channels on C-MAPSS, Xiong et al.~\cite{xiong_controlled_2023}
+use 18 channels on N-CMAPSS, and
+Zhang et al.~\cite{zhang_multivariate_2025} propose a dual-channel
+Transformer-based conditional GAN for multivariate generation on
+C-MAPSS and FEMTO. However, none of these multivariate approaches
+target bearing datasets, where the sensor dimensionality is lower but
+the cross-channel correlations between horizontal and vertical
+vibration signals are physically significant for degradation
+characterization.\\
+
+A second limitation concerns the conditioning strategy of the
+generator. Most existing GANs generate degradation trajectories
+unconditionally: the generator receives random noise and produces a
+sequence without explicit knowledge of which degradation regime
+(healthy, early degradation, or near-failure) the output should
+represent~\cite{9486650, lu_joint_2022, vibration7020029,
+wen_gru-ae-wiener_2024}. This unconditional generation is
+problematic because the primary motivation for augmentation is the
+scarcity of \textit{near-failure} data specifically, while healthy-state
+samples are already abundant. An unconditional generator may produce
+sequences that predominantly resemble the majority class (healthy),
+failing to address the very imbalance it was designed to correct.
+A small number of studies have explored conditioning strategies:
+Xiong et al.~\cite{xiong_controlled_2023} condition their
+physics-informed CPI-GAN on physical degradation constraints,
+Zhang et al.~\cite{9300234} incorporate degradation stage information
+in their CR-GAN framework, and
+Zhang et al.~\cite{zhang_multivariate_2025} condition their
+Transformer-based GAN on the RUL label. Outside the GAN paradigm,
+Tian et al.~\cite{11503642} recently proposed a diffusion model
+conditioned on degradation stage for C-MAPSS augmentation, achieving
+up to 27.3\% RMSE improvement. Nevertheless, none of these
+stage-conditioned approaches have been applied to bearing datasets,
+where degradation stages can be automatically derived from health
+indicator trajectories without requiring external annotation.\\
+
+A third and critical limitation is the near-complete absence of
+rigorous uncertainty quantification in GAN-augmented RUL frameworks,
+and more fundamentally, the absence of any study examining how the
+augmentation itself affects the quality of the resulting uncertainty
+estimates. Among all reviewed studies, only two incorporate any form
+of uncertainty estimation.
+Lu et al.~\cite{lu_joint_2022} add a Gaussian output layer that
+estimates the mean and variance of the predicted health indicator,
+but their own reliability curves reveal that the resulting intervals
+are systematically overconfident, and no formal coverage guarantee is
+provided. Zhu et al.~\cite{lubricants13040145} employ a Wiener
+process with Bayesian updating for stochastic RUL estimation
+alongside their CMC-GAN augmentation, but this approach relies on
+parametric assumptions about the degradation dynamics that may not
+hold across different equipment types.
+All remaining studies produce deterministic point estimates with no
+accompanying confidence
+bounds~\cite{9486650, vibration7020029, 9300234,
+xiong_controlled_2023, behera_generative_2021, cheng_remaining_2023,
+wen_gru-ae-wiener_2024}. In every case the augmentation is evaluated
+solely through its effect on point accuracy; whether enlarging the
+training set with synthetic near-failure data alters the calibration
+of the prediction intervals is a question that, to our knowledge, has
+not been posed. This absence is consequential from a
+reliability engineering perspective: a point estimate of
+RUL without a calibrated prediction interval provides insufficient
+information for risk-informed maintenance scheduling, where the
+consequence of overestimation---predicting a component will last
+longer than it actually does---is a potential safety hazard.\\
+
+These three limitations (scalar health indicator input,
+unconditional generation, and the unexamined interaction between
+augmentation and uncertainty calibration) collectively constrain the
+practical reliability of GAN-augmented RUL prediction. The following
+sections review the uncertainty quantification landscape
+(Section~\ref{sec:uq_rul}) and multi-task learning approaches
+(Section~\ref{sec:multitask_rul}) that address the remaining gaps
+identified in this analysis. A comprehensive comparison of all
+reviewed methods is presented in Table~\ref{tab:comparison}.
+
+
+\subsection{Uncertainty Quantification for RUL Prediction}
+\label{sec:uq_rul}
+
+The previous sections established that most deep learning models for RUL
+prediction produce deterministic point estimates and that
+GAN-based augmentation, while effective at improving point accuracy,
+has been combined with uncertainty quantification in only two studies,
+both using parametric methods without coverage guarantees. This section
+reviews the broader landscape of uncertainty quantification (UQ)
+methods for RUL prediction to situate conformal prediction within the
+existing literature and to identify why its interaction with generative
+augmentation remains unexplored.\\
+
+Parametric UQ methods represent the most widely adopted approach in
+the RUL literature. Bayesian Neural Networks (BNNs) have been applied
+to bearing prognostics by Yang et al.~\cite{10854686} using a
+GRU-BNN architecture on a custom rolling bearing dataset, by
+Pan et al.~\cite{pan_two-stage_2025} using variational inference on
+PRONOSTIA, by Wang et al.~\cite{wang_physics-constrained_2026} using
+physics-constrained Bayesian inference on bearing data, and by
+Chang et al.~\cite{chang_few-shot_2025} using Bayesian
+meta-learning for few-shot bearing RUL on XJTU-SY. On turbofan
+engines, Salehi et al.~\cite{salehi_bayesian_2026} developed a
+Bayesian Informer achieving 93\% coverage, and
+Zeng et al.~\cite{zeng_2026} proposed an attention-based Bayesian
+ensemble reporting a PICP of 99.86\% on C-MAPSS. Monte Carlo Dropout
+(MC Dropout) is the second most common parametric approach:
+Ge et al.~\cite{ge_bearing_2025} combined MC Dropout with a Gaussian
+output layer for bearing RUL on XJTU-SY and PHM~2012, reporting PICP
+and PINAW metrics;
+Ye et al.~\cite{11131520} applied MC Dropout with contrastive
+learning on XJTU-SY; and
+Yilma et al.~\cite{yilma_deep_2026} combined evidential deep
+learning with MC Dropout on C-MAPSS, reporting both PICP and PINAW.
+Gaussian output layers, which estimate the mean and variance of the
+predicted distribution directly, have been used by
+Zhang et al.~\cite{11398369} and
+Chen et al.~\cite{chen_probabilistic_2026}, with the latter
+reporting both PICP and MPIW on C-MAPSS. A common limitation across
+all parametric methods is their reliance on distributional
+assumptions, typically Gaussian, that may not hold for the
+non-linear, non-stationary degradation dynamics characteristic of
+industrial bearings. When these assumptions are violated, the
+resulting prediction intervals can be miscalibrated:
+Vashishtha et al.~\cite{s26072230} reported a PICP of only 0.594
+on the IMS bearing dataset using a VAE-based probabilistic model,
+indicating severe under-coverage, and
+Zhou et al.~\cite{zhou_self-attention_2026} explicitly acknowledged
+that MC Dropout underestimates the true variability of degradation
+data, requiring post-processing corrections to mitigate
+overconfidence. Similarly, Lu et al.~\cite{lu_joint_2022}, the only
+study combining GAN augmentation with parametric UQ, showed through
+reliability curves that their Gaussian layer produces systematically
+overconfident intervals on the XJTU-SY bearing dataset.\\
+
+Quantile regression and VAE-based approaches offer partially
+distribution-free alternatives but introduce their own limitations.
+Zhang et al.~\cite{zhang_explainable_2025} applied a gated quantile
+regression network with kernel density estimation to XJTU-SY and IMS
+bearing data, reporting an average coverage of roughly 94\% across the
+two datasets---one of the few bearing UQ studies with rigorous interval
+evaluation. While quantile regression does not assume a
+specific output distribution, it requires careful selection of
+quantile levels and does not provide a finite-sample coverage
+guarantee in the conformal sense. VAE-based methods, including the
+Dynamical VAE of Star and McKee~\cite{star_dynamical_2025} and the
+Gaussian Process VAE of Ding et al.~\cite{10738265}, generate
+uncertainty estimates through latent space sampling. However, these
+approaches are architecture-specific, in that the UQ mechanism is
+inseparable from the generative model, making it impossible to
+independently evaluate the contribution of data augmentation versus
+uncertainty estimation---a methodological limitation that the proposed
+framework avoids by deliberately separating the generative component
+(the GAN) from the UQ component (conformal prediction).\\
+
+Conformal prediction has recently emerged as a principled alternative
+that provides distribution-free, finite-sample coverage guarantees
+regardless of the underlying model architecture.
+Javanmardi and H{\"u}llermeier~\cite{javanmardi_conformal_2023}
+conducted the most comprehensive study to date, comparing Split
+Conformal Prediction (SCP), Conformalized Quantile Regression (CQR),
+and non-exchangeable SCP on the C-MAPSS dataset with deep
+convolutional neural networks and gradient boosting as base
+predictors. Their key finding, that conformal interval quality depends
+directly on the nonconformity scores of the underlying regression
+model, provides the theoretical basis for the interaction examined in
+this paper: altering the base predictor's error distribution through
+GAN augmentation should in turn alter the quality of its conformal
+intervals, whether by narrowing them at fixed coverage or by bringing
+their empirical coverage closer to the nominal target. Subsequent
+conformal prediction studies
+have expanded the methodological repertoire:
+Xu and Zio~\cite{10381131} demonstrated model-agnostic split CP
+across six different base predictors (SVR, RF, GB, CNN, DNN, LSTM)
+on C-MAPSS at 90\% coverage;
+Piao et al.~\cite{10816036} proposed CRULP, combining
+uncertainty-aware CQR with ensemble cross-conformal prediction;
+Piao et al.~\cite{11163867} addressed covariate shift with an
+adaptive conformalized predictor;
+Robinson et al.~\cite{robinson_remaining_2026} integrated risk-aware
+conformal prediction with maintenance cost optimization;
+Moccardi et al.~\cite{fi17060244} compared naive, bootstrapping, and
+weighted conformal prediction for IoT-based predictive maintenance;
+and Hattar and Vincent~\cite{11044907} applied conformal prediction
+with Random Forest and LightGBM ensembles. Recent hybrid
+approaches have combined conformal prediction with other UQ methods:
+Alomari et al.~\cite{11488562} integrated MC Dropout with conformal
+prediction in a multi-task framework on N-CMAPSS, achieving 97.3\%
+empirical coverage;
+Yang et al.~\cite{yang_uncertainty_2026} combined MC Dropout with
+conformal prediction using a Transformer on C-MAPSS at 95\% coverage;
+Xu et al.~\cite{xu_novel_2026} paired Bayesian deep learning with
+split conformal prediction on C-MAPSS and a lithium-ion battery
+dataset; and
+Wen et al.~\cite{en19020414} combined MC Dropout with inductive
+conformal prediction for battery RUL.\\
+
+Only very recently has conformal prediction been applied to bearing
+RUL specifically, in two concurrent 2026 studies.
+Bott et al.~\cite{11373138} combined a physics-based degradation
+simulator with conditional normalizing flows for sim-to-real feature
+alignment, training tabular predictors exclusively on synthetic data
+and wrapping their output with split conformal prediction on the
+XJTU-SY dataset; their symmetric conformal intervals attain an
+empirical coverage of 0.919 against a 90\% nominal target, with a mean
+width of 0.654.
+Wang et al.~\cite{wang_uncertainty-aware_2026} proposed a
+physics-informed framework in which a variational autoencoder
+constructs a monotonic health index, a Transformer predictor is
+trained with a monotonicity constraint, and Monte Carlo dropout
+intervals are recalibrated post hoc through conformal prediction;
+on XJTU-SY their coverage rises from 0.484 before calibration to 0.945
+after, confirming that the raw intervals were severely overconfident
+and that conformal calibration corrects this. These two studies
+establish that conformal calibration is both applicable and necessary
+for bearing RUL, and the present work builds directly on that footing.
+Two features nonetheless distinguish them from the approach proposed
+here. First, both report a single aggregate coverage over the whole
+test population and do not examine whether coverage holds within the
+near-failure regime specifically, where it matters most for maintenance
+safety and where, as shown in Section~\ref{sec:windowing}, the
+heterogeneity of residuals across degradation stages places the
+strongest demands on the calibration procedure. Second, and more
+fundamentally, both calibrate a model trained on real data only (Wang
+et al.) or on physics-simulated data (Bott et al.); neither employs
+generative adversarial augmentation, and neither investigates how such
+augmentation affects conformal coverage.\\
+
+Three gaps therefore persist in the conformal prediction literature for
+RUL estimation. First, no study examines the effect of generative
+adversarial augmentation on conformal coverage: existing work
+conformalizes models trained on real or physics-simulated data, leaving
+unexplored whether enriching the training set with synthetic
+near-failure data alters interval calibration, despite the theoretical
+argument of Javanmardi and
+H{\"u}llermeier~\cite{javanmardi_conformal_2023} that interval quality
+is governed by the base predictor's nonconformity scores. Second, the
+two existing bearing conformal studies report only aggregate coverage,
+without the stage-conditional calibration needed to guarantee coverage
+within the near-failure regime whose residual distribution differs
+sharply from the healthy one. Third, no study combines conformal
+prediction with multi-task learning on bearing data, which would allow
+the conformal layer to benefit from a representation shared with an
+auxiliary degradation-stage task.
+
+
+\subsection{Multi-task Learning for RUL Prediction}
+\label{sec:multitask_rul}
+
+Beyond uncertainty quantification, another avenue for improving
+RUL prediction accuracy lies in the learning architecture itself.
+Multi-task learning (MTL) offers a principled mechanism for
+extracting richer representations by jointly training a shared
+encoder on multiple related tasks, enabling the model to learn
+more discriminative features than either task alone would produce.
+In the context of bearing prognostics, the most natural auxiliary
+tasks are fault mode classification and degradation stage
+identification, both of which share informative features with RUL
+regression: the temporal patterns that distinguish fault types or
+degradation stages are often the same patterns that characterize
+degradation severity. This section reviews the growing body of
+multi-task learning research for RUL prediction.\\
+
+The effectiveness of multi-task learning for RUL has been
+demonstrated through two dominant formulations. The first combines
+RUL regression with fault mode classification.
+Liu et al.~\cite{8709822} proposed the JL-CNN, an early
+multi-task architecture with shared convolutional layers and a joint
+loss function for simultaneous fault recognition and RUL prediction
+on IMS bearing data, achieving a 24.9\% RMSE reduction over a
+single-task CNN baseline.
+Xu et al.~\cite{xu_novel_2025} extended this paradigm with a fault
+mode feature separation network, reporting an 11.87\% RMSE
+improvement through shared representation learning on both C-MAPSS
+and IMS bearing datasets.
+Zhang et al.~\cite{10216122} proposed a parallel feature fusion
+network for simultaneous bearing fault detection and RUL prediction
+on IMS, achieving 32.6\% RMSE improvement over a CNN-LSTM baseline
+without multi-task learning.
+More recently, Lai et al.~\cite{LAI2026112091} developed FR-LLM, a
+unified multi-task large language model for joint fault diagnosis
+and RUL prediction on the XJTU-SY and IMS bearing datasets,
+demonstrating that multi-task learning consistently outperforms
+single-task approaches in accuracy and generalization.
+Liu et al.~\cite{11434241} proposed MSDA-Net, combining a
+sensor-wise CNN with a BiLSTM and dual attention for joint failure
+classification and RUL estimation on C-MAPSS, explicitly
+identifying the absence of uncertainty quantification as a
+limitation and recommending Bayesian methods for future work.\\
+
+The second formulation combines RUL regression with health state or
+degradation stage assessment. This approach has gained particular
+traction in the reliability engineering community.
+Zhang et al.~\cite{zhang_health_2022} proposed a BiGRU with
+multi-gate mixture-of-experts (MMoE) for joint health status
+assessment and RUL prediction of aero-engines, using homoscedastic
+uncertainty for task weighting.
+Zhang et al.~\cite{zhang_multi-task_2023} extended this with
+MTLTrans, a Transformer-based architecture that jointly optimizes
+three tasks---RUL prediction, state-of-health assessment, and
+performance degradation prediction, achieving an 18.83\% RMSE
+improvement across 12 cross-domain scenarios on C-MAPSS.
+Zhou and Wang~\cite{zhou_adaptive_2024} developed an adaptive
+multi-scale feature fusion model with mixture-of-experts for joint
+health assessment and RUL prediction, also employing homoscedastic
+uncertainty weighting for multi-task optimization.
+Gao et al.~\cite{gao_bmtr-former_2026} proposed BMTR-former, a
+Bayesian multi-task Transformer that combines RUL prediction with
+signal reconstruction as a self-supervised auxiliary task,
+specifically targeting data scarcity through sliding window
+augmentation and Bayesian inference for uncertainty estimation.
+On bearing data specifically,
+Wang and Wu~\cite{10295667} constructed a multi-task framework for
+joint health stage identification and RUL prediction on XJTU-SY,
+using fuzzy clustering for automatic stage label derivation.
+Chen et al.~\cite{11363290} proposed a conflict-free multi-task
+framework for joint health assessment and RUL prediction on both
+XJTU-SY and PHM~2012, using wavelet-based first prediction time
+detection for automatic label construction. Most recently,
+Zeng et al.~\cite{11451867} developed a convolutional recurrent
+residual network with attention for joint degradation stage
+identification and continuous RUL regression on a large-scale
+bearing dataset, with a weighted MSE loss that emphasizes the
+near-failure regime, an approach that addresses the same
+data imbalance problem as the proposed GAN augmentation, but
+through loss weighting rather than synthetic data generation.\\
+
+Despite these advances, three critical gaps persist in the
+multi-task RUL literature. The first concerns the combination of
+multi-task learning with generative data augmentation. Among all
+reviewed studies, only two incorporate any form of generative
+augmentation.
+Behera et al.~\cite{10107629} proposed an LS-R-ACGAN multi-task
+framework combining GAN-based augmentation with joint RUL and
+health assessment prediction on C-MAPSS, but reported inflated
+improvement metrics (354\%) against unspecified baselines, used no
+uncertainty quantification, and validated exclusively on turbofan
+engine data, not bearing datasets.
+Guan et al.~\cite{guan_enhanced_2026} combined multi-task learning
+with VAE-based augmentation for semi-supervised RUL prediction on
+C-MAPSS, but again without bearing validation or uncertainty
+quantification. All remaining studies train exclusively on real data,
+leaving the multi-task encoder vulnerable to the same near-failure
+data scarcity that limits single-task models. The proposed framework
+addresses this gap by training the multi-task BiLSTM on
+GAN-augmented data conditioned on degradation stage, simultaneously
+enriching the training set for both the RUL regression and stage
+classification heads.\\
+
+The second gap concerns uncertainty quantification. Among the
+reviewed multi-task studies, only a minority incorporate any form
+of UQ: Wang et al.~\cite{wang_multi-task_2024} use mixture density
+networks on IMS bearing data;
+Gao et al.~\cite{gao_bmtr-former_2026} employ Bayesian deep learning
+on C-MAPSS; and
+Zhang et al.~\cite{zhang_health_2022} and
+Zhou and Wang~\cite{zhou_adaptive_2024} use homoscedastic uncertainty
+weighting for task balancing rather than for producing prediction
+intervals. All of these are parametric approaches that assume
+specific output distributions. No multi-task RUL study applies
+conformal prediction to provide distribution-free,
+coverage-guaranteed prediction intervals, with one exception:
+Alomari et al.~\cite{11488562} recently combined multi-task learning
+with conformal prediction on N-CMAPSS, achieving 97.3\% empirical
+coverage, but without generative augmentation and only on turbofan
+engine data. The proposed framework extends this direction by
+combining conformal prediction with both multi-task learning and GAN
+augmentation on bearing datasets.\\
+
+The third gap concerns the choice and derivation of auxiliary task
+labels. The majority of fault-based multi-task studies require
+manually annotated fault mode
+labels~\cite{8709822, LAI2026112091, 11434241}, which are expensive
+to obtain in industrial settings and unavailable for many bearing
+datasets. Health state formulations avoid this problem through
+automatic label derivation, using fuzzy
+clustering~\cite{10295667}, wavelet-based detection~\cite{11363290},
+or threshold-based
+segmentation~\cite{zhang_health_2022, 11451867}, but no existing
+study derives stage labels directly from the health indicator
+trajectory using physically meaningful thresholds (first prediction
+time and end-of-life) as proposed in this work. This approach
+produces degradation stage labels that are automatically constructed,
+physically interpretable, and directly aligned with the
+stage-conditioned GAN augmentation of
+Section~\ref{sec:gan_augmentation}: the GAN generates synthetic
+samples targeting the underrepresented near-failure stage, while the
+multi-task classifier learns to recognize that same stage, creating a
+synergistic loop between augmentation and multi-task learning.
+
+
+\subsection{Summary and Research Gaps}
+\label{sec:summary_gaps}
+
+The preceding review reveals that while substantial progress has been
+made in each individual research direction, no existing study
+simultaneously addresses the compounding limitations that
+constrain the reliability of bearing RUL prediction in
+safety-critical industrial settings.\\
+
+Section~\ref{sec:dl_rul} established that deep learning architectures,
+particularly BiLSTM networks with attention mechanisms, have
+become the state of the art for RUL estimation on bearing datasets
+such as XJTU-SY. However, all reviewed models are bounded by the
+quantity and distribution of their training data: the critical
+near-failure regime is systematically underrepresented in
+run-to-failure experiments, and the reported errors are difficult to
+compare across studies because evaluation protocols are rarely stated
+in full.\\
+
+Section~\ref{sec:gan_augmentation} showed that GAN-based data
+augmentation effectively mitigates near-failure data scarcity, with
+reported improvements of 15--30\% in RMSE. Yet existing GAN
+approaches operate predominantly on scalar health indicators rather
+than multivariate sensor sequences, generate degradation trajectories
+without conditioning on degradation stage, and evaluate the
+augmentation exclusively through point accuracy, leaving its effect on
+the calibration of prediction intervals entirely unexamined.\\
+
+Section~\ref{sec:uq_rul} demonstrated that uncertainty quantification
+for RUL prediction is a rapidly growing field, with parametric methods
+(Bayesian networks, MC Dropout, Gaussian layers) widely adopted but
+limited by distributional assumptions that lead to miscalibration.
+Conformal prediction offers a distribution-free alternative with
+finite-sample coverage guarantees. It has only very recently been
+applied to bearing RUL, by two concurrent 2026 studies, and in both
+cases to a model trained without generative augmentation, with coverage
+reported only in aggregate rather than within the critical near-failure
+regime.\\
+
+Section~\ref{sec:multitask_rul} established that multi-task learning
+improves RUL accuracy through shared representation learning,
+with degradation stage classification emerging as a particularly
+effective auxiliary task for bearing applications. However, no
+existing multi-task framework simultaneously incorporates generative
+augmentation to address near-failure data scarcity and conformal
+prediction to provide coverage-guaranteed intervals.\\
+
+Table~\ref{tab:comparison} provides a systematic comparison of the
+proposed framework against the most relevant existing methods across
+seven dimensions. The proposed framework is, to our knowledge, the
+first to integrate all three components in a single pipeline for
+bearing RUL: (1)~a conditional GAN generates synthetic multivariate
+sensor sequences conditioned on degradation stage, specifically
+targeting the underrepresented near-failure regime; (2)~a multi-task
+BiLSTM with attention jointly predicts RUL and degradation stage,
+where the auxiliary classification task forces the shared encoder to
+learn stage-discriminative features that improve accuracy in the
+critical late-degradation period; and (3)~stage-conditional conformal
+prediction wraps the RUL regression output to produce distribution-free,
+coverage-guaranteed prediction intervals evaluated per degradation
+stage through PICP and MPIW. Beyond this integration, the central
+empirical question examined in this work has not been posed in the
+prior literature: whether stage-conditioned generative augmentation
+improves the quality of the conformal intervals---and in particular the
+reliability of coverage in the near-failure regime---over and above its
+effect on point accuracy.
+
+
+% ============================================================
+%  Qualitative comparison table (seven dimensions)
+% ============================================================
+
+\begin{table}[!htbp]
+\centering
+\caption{Comparison of the proposed framework against existing methods.}
+\label{tab:comparison}
+\footnotesize
+\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{lc ccccccc}
+\toprule
+\textbf{Study} & \textbf{Year}
+  & \rotatebox{70}{\textbf{GAN augment.}}
+  & \rotatebox{70}{\textbf{MV input}}
+  & \rotatebox{70}{\textbf{Stage-cond.}}
+  & \rotatebox{70}{\textbf{Multi-task}}
+  & \rotatebox{70}{\textbf{UQ method}}
+  & \rotatebox{70}{\textbf{Coverage guar.}}
+  & \rotatebox{70}{\textbf{Bearing data}} \\
+\midrule
+
+% --- GAN augmentation ---
+Lu et al.~\cite{9486650}                    & 2021 & \checkmark & \texttimes & \texttimes & \texttimes & --   & \texttimes & \checkmark \\
+Lu et al.~\cite{lu_joint_2022}              & 2022 & \checkmark & \texttimes & \texttimes & \texttimes & GL   & \texttimes & \checkmark \\
+Zhang et al.~\cite{9300234}                 & 2021 & \checkmark & \checkmark & \checkmark & \texttimes & --   & \texttimes & \texttimes \\
+Xiong et al.~\cite{xiong_controlled_2023}   & 2023 & \checkmark & \checkmark & \checkmark & \texttimes & --   & \texttimes & \texttimes \\
+Zhu et al.~\cite{lubricants13040145}        & 2025 & \checkmark & \checkmark & \texttimes & \texttimes & WP   & \texttimes & \texttimes \\
+\midrule
+
+% --- Conformal prediction ---
+Javanmardi~\cite{javanmardi_conformal_2023} & 2022 & \texttimes & \checkmark & \texttimes & \texttimes & CP   & \checkmark & \texttimes \\
+Piao et al.~\cite{10816036}                 & 2025 & \texttimes & \checkmark & \texttimes & \texttimes & CP   & \checkmark & \texttimes \\
+Alomari et al.~\cite{11488562}              & 2026 & \texttimes & \checkmark & \texttimes & \checkmark & CP   & \checkmark & \texttimes \\
+Wang et al.~\cite{wang_uncertainty-aware_2026} & 2026 & \texttimes & \checkmark & \texttimes & \texttimes & CP & \checkmark & \checkmark \\
+Bott et al.~\cite{11373138}                 & 2026 & \texttimes & \checkmark & \texttimes & \texttimes & CP   & \checkmark & \checkmark \\
+\midrule
+
+% --- Multi-task learning ---
+Liu et al.~\cite{8709822}                   & 2020 & \texttimes & \checkmark & \texttimes & \checkmark & --   & \texttimes & \checkmark \\
+Wang et al.~\cite{wang_multi-task_2024}     & 2024 & \texttimes & \checkmark & \texttimes & \checkmark & MDN  & \texttimes & \checkmark \\
+Zeng et al.~\cite{11451867}                 & 2026 & \texttimes & \checkmark & \texttimes & \checkmark & --   & \texttimes & \checkmark \\
+Behera et al.~\cite{10107629}               & 2024 & \checkmark & \checkmark & \texttimes & \checkmark & --   & \texttimes & \texttimes \\
+Gao et al.~\cite{gao_bmtr-former_2026}      & 2026 & \texttimes & \checkmark & \texttimes & \checkmark & BDL  & \texttimes & \texttimes \\
+\midrule
+
+\rowcolor[RGB]{198,224,180}
+\textbf{Proposed}                            & \textbf{2026}
+  & \checkmark & \checkmark & \checkmark & \checkmark
+  & \textbf{CP} & \checkmark & \checkmark \\
+
+\bottomrule
+\end{tabular}
+
+\vspace{4pt}
+\raggedright\scriptsize
+GL: Gaussian layer. WP: Wiener process. CP: conformal prediction.
+MDN: mixture density network. BDL: Bayesian deep learning.
+--: no uncertainty quantification.
+\end{table}
