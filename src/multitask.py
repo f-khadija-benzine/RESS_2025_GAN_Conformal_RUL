@@ -152,6 +152,17 @@ class MultiTaskTrainer:
                 np.concatenate(stages) if stages else np.empty(0))
 
     @torch.no_grad()
+    def predict_stage_proba(self, X):
+        """Softmax stage probabilities, (N, n_stages)."""
+        self.model.eval()
+        X = torch.as_tensor(X, dtype=torch.float32).to(self.device)
+        out = []
+        for i in range(0, len(X), self.cfg.batch_size):
+            _, s = self.model(X[i:i + self.cfg.batch_size])
+            out.append(torch.softmax(s, dim=1).cpu().numpy())
+        return np.concatenate(out) if out else np.empty((0, self.cfg.n_stages))
+
+    @torch.no_grad()
     def predict_rul(self, X):
         return self.predict(X)[0]
 
