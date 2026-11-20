@@ -1,0 +1,317 @@
+% ============================================================
+%  Section 4 — Experimental Setup
+%  Dataset-specific choices and the evaluation protocol. The
+%  framework itself is defined in Section 3; measured outcomes are
+%  in Section 5.
+% ============================================================
+
+\section{Experimental Setup}
+\label{sec:experimental_setup}
+
+% ------------------------------------------------------------
+\subsection{Dataset Description}
+\label{sec:dataset}
+
+The framework is evaluated on the XJTU-SY rolling element bearing
+dataset~\cite{8576668, lei2019xjtusy}, a widely used benchmark that
+provides complete run-to-failure vibration data from accelerated life
+tests. The dataset comprises 15~bearings in three groups of five, each
+tested under a distinct operating condition
+(Table~\ref{tab:xjtu_conditions}). Two accelerometers record the
+horizontal and vertical vibration simultaneously. Each recording lasts
+1.28~s (32,768~samples at 25.6~kHz) and is taken once per minute until
+failure.
+
+\begin{table}[htbp]
+\centering
+\caption{XJTU-SY operating conditions and bearing characteristics.}
+\label{tab:xjtu_conditions}
+\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{cccccc}
+\toprule
+\textbf{Cond.} & \textbf{Speed} & \textbf{Load} &
+\textbf{Bearings} & \textbf{Lifetime range} &
+\textbf{Failure modes} \\
+& (Hz) & (kN) & & (min) & \\
+\midrule
+1 & 35.0  & 12.0 & 1-1 to 1-5 & 52--161 &
+  OR (3), Cage (1), OR+Ball (1) \\
+2 & 37.5  & 11.0 & 2-1 to 2-5 & 42--533 &
+  OR (3), IR (1), Cage (1) \\
+3 & 40.0  & 10.0 & 3-1 to 3-5 & 114--2538 &
+  OR (2), IR (2), IR+Ball (1) \\
+\bottomrule
+\end{tabular}
+
+\vspace{2pt}
+\raggedright\scriptsize OR: outer race. IR: inner race.
+\end{table}
+
+Bearing lifetimes vary widely across and within operating conditions
+(Fig.~\ref{fig:lifetime_distribution}). Condition~1, with the heaviest
+radial load, produces the shortest lifetimes (52--161~min), while
+Condition~3 ranges from 114 to over 2,500~min. Within Condition~2,
+Bearing~2-4 failed after 42~min and Bearing~2-3 after 533~min under
+identical settings. Failure modes also differ between bearings of the
+same condition, so the operating parameters influence the failure mode
+without determining it.\\
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/01_lifetime_distribution.png}
+  \caption{Bearing lifetimes across the three operating conditions
+  of the XJTU-SY dataset.}
+  \label{fig:lifetime_distribution}
+\end{figure}
+
+Fig.~\ref{fig:all_bearings_rms} shows the RMS of the horizontal
+channel over the life of all 15~bearings. The RMS stays near a low
+baseline during healthy operation, rises as degradation starts, and
+climbs sharply before failure. The dynamics nonetheless differ between
+bearings: smooth monotone growth (Bearing~3-1), abrupt failure with
+little warning (Bearing~1-4, cage fault), oscillation with partial
+recoveries (Bearing~2-5), or several distinct rates of change
+(Bearing~1-2). A predictor must learn from all of these patterns, and
+an interval must remain valid across them.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/01_all_15_bearings_rms_overview.png}
+  \caption{RMS vibration amplitude (horizontal channel) over the
+  operational life of all 15~XJTU-SY bearings, organised by operating
+  condition, with bearing ID, failure mode and lifetime.}
+  \label{fig:all_bearings_rms}
+\end{figure}
+
+% ------------------------------------------------------------
+\subsection{Health Indicator, Stage Labels and Features}
+\label{sec:hi_staging}
+
+The health indicator of Section~\ref{sec:method_staging} is the RMS of
+the horizontal channel, which responds most strongly to the radial
+load applied in these tests~\cite{lu_joint_2022}, smoothed with a
+short moving average. The healthy baseline is estimated over the first
+$\eta = 20\%$ of each bearing's life, the relative floor is
+$\rho = 0.20$, and the persistence length is $m = 5$ recordings.\\
+
+The relative floor is necessary on this dataset. Long-lived bearings
+have an exceptionally stable baseline: for Bearing~3-1 the healthy RMS
+varies by only a few percent, so $\mu + 3\sigma$ lies barely above the
+healthy level and is crossed by ordinary fluctuations. Without the
+floor, the FPT of Bearing~3-1 is detected at minute~23 of 2,537,
+labelling more than 99\% of its life as degrading, and that of
+Bearing~3-2 at minute~169 of 2,495. These two bearings hold over half
+of all recordings, so the error would propagate into every partition.
+Across the 15~bearings, healthy fluctuations remain within about 10\%
+of the baseline, whereas degradation raises the RMS by close to an
+order of magnitude, so a 20\% floor separates the two regimes with a
+wide margin.\\
+
+Fig.~\ref{fig:hi_all_bearings} overlays the resulting stages on the
+health indicator. In every bearing the onset of Stage~2 coincides with
+the visible departure from the baseline and Stage~3 with the terminal
+rise. Two groups of bearings appear. Some degrade abruptly, with a flat
+indicator for most of their life and a near-vertical rise that
+compresses both degradation stages into a short final window
+(Bearings~2-1, 3-1, 3-3 and~3-4). Others degrade progressively, often
+with oscillations (Bearings~1-2, 2-3, 2-5 and~3-2). Abrupt failures
+occur in short- and long-lived bearings alike, which is why the
+threshold is expressed in relative terms.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{figures/02_all_bearings_stages.png}
+  \caption{Health indicator (horizontal RMS) of all 15~bearings with
+  the automatically detected stages. Green: Stage~1 (healthy). Orange:
+  Stage~2 (early degradation). Red: Stage~3 (near-failure). Dashed
+  lines: FPT and acceleration point.}
+  \label{fig:hi_all_bearings}
+\end{figure}
+
+Over all 9,216~recordings, Stage~1 accounts for 70.7\%, Stage~2 for
+15.9\% and Stage~3 for only 13.4\% (Fig.~\ref{fig:stage_distribution}).
+The imbalance is stronger still within bearings: several bearings
+contribute only a handful of near-failure recordings, and Bearing~3-2
+alone holds about half of all near-failure windows. This is the
+scarcity that C1 targets, and the concentration that makes calibration
+on few bearings fragile.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/02_stage_distribution_per_bearing_pct.png}
+  \caption{Degradation stage distribution. Left: composition of each
+  bearing's life. Right: global composition over all 9,216~recordings.}
+  \label{fig:stage_distribution}
+\end{figure}
+
+The predictors use a multivariate representation. Ten time-domain
+features are extracted per channel and recording: amplitude
+descriptors (RMS, peak, peak-to-peak, standard deviation),
+distribution-shape descriptors (kurtosis, skewness) and dimensionless
+impulse descriptors (crest, shape, impulse and clearance factors).
+The two channels give $d = 20$ features per recording.
+Fig.~\ref{fig:feature_matrix} shows that these features are stable
+during the healthy phase and change sharply from the FPT onward, with
+amplitude and distribution-shape descriptors moving in opposite
+directions. The feature families therefore carry complementary
+information, which motivates generating and predicting from the full
+multivariate window rather than a scalar indicator.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/02_feature_matrix_heatmap.png}
+  \caption{Temporal evolution of the 20 time-domain features (z-scored
+  per feature) for Bearing~2-1. Dashed lines: FPT and acceleration
+  point.}
+  \label{fig:feature_matrix}
+\end{figure}
+
+% ------------------------------------------------------------
+\subsection{Windowing, Normalisation and Partitioning}
+\label{sec:windowing}
+
+Windows of $w = 32$ recordings are taken with a stride of one, giving
+inputs of dimension $32 \times 20$. The unit stride is kept despite the
+overlap between adjacent windows because the shortest bearings would
+otherwise contribute almost nothing: Bearing~2-4 yields only
+11~windows even at unit stride.\\
+
+The amplitude, impulse and kurtosis features are strictly positive and
+grow by about a factor of twenty near failure. They are log-transformed
+before standardisation, which would otherwise be dominated by the
+abundant healthy windows and place near-failure values tens of
+standard deviations from the mean. Standardisation statistics are
+estimated on the training windows of each model only, and the
+standardised values are clipped to $\pm 5$ standard deviations to bound
+the low-variance shape features.\\
+
+\textit{Outer folds.} Five folds are formed following the protocol of
+Lu et al.~\cite{lu_joint_2022}: fold~$k$ tests on Bearings~1-$k$, 2-$k$
+and~3-$k$, so that every fold spans the three operating conditions and
+every bearing is tested exactly once.\\
+
+\textit{Inner groups for cross-conformal calibration.} The 12 non-test
+bearings of each fold contain four bearings per operating condition.
+They are divided into $K = 4$ groups of three, group~$j$ holding the
+$j$-th remaining bearing of each condition, so that every inner model
+is trained on all three conditions, as the test set is. Each inner
+model therefore trains on 9~bearings and scores its 3~held-out
+bearings. Of the 9, one is used for early stopping: the smallest
+bearing that yields at least 300~windows, so that the validation error
+is stable enough to detect a genuine plateau, while as few windows as
+possible are withheld from training. The remaining 8~bearings form the
+training set. Over the 12 non-test bearings, the four inner models
+provide out-of-sample residuals for every window.\\
+
+Because three bearings account for most of the recordings, the folds
+remain unbalanced after partitioning: test sets range from 412 to
+3,059~windows. Per-fold metrics are therefore estimated with unequal
+precision, which is why results are also examined per bearing
+(Section~\ref{sec:res_per_bearing}).
+
+% ------------------------------------------------------------
+\subsection{Implementation Details}
+\label{sec:implementation}
+
+Table~\ref{tab:hyperparams} lists the hyperparameters. The augmentation
+ratio $r = 0.75$ and the stage-loss weight $\lambda = 1.0$ were
+selected on preliminary runs over $r \in \{0.25, 0.5, 0.75, 1.0\}$ and
+$\lambda \in \{0.3, 0.5, 1.0\}$. A generator is trained for each of the
+20 inner models (5 folds $\times$ 4 groups); it does not depend on the
+seed. In the single-task configurations, the stage used by C3 comes
+from a stage network identical in architecture and training to the
+multi-task predictor without augmentation.
+
+\begin{table}[htbp]
+\centering
+\caption{Hyperparameters of the framework components.}
+\label{tab:hyperparams}
+\footnotesize
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lll}
+\toprule
+\textbf{Component} & \textbf{Setting} & \textbf{Value} \\
+\midrule
+\multirow{8}{*}{C1 (generator, critic)}
+ & Noise dimension & 64 \\
+ & Conv.\ channels / kernel & 128 / 5 \\
+ & BiLSTM units per direction & 128 \\
+ & Optimiser, learning rate & Adam, $10^{-4}$ \\
+ & Adam $(\beta_1, \beta_2)$ & $(0.5, 0.9)$ \\
+ & Batch size / epochs & 64 / 300 \\
+ & Critic steps $n_{\mathrm{c}}$ & 3 \\
+ & Penalty weight $\lambda_{\mathrm{gp}}$ & 10 \\
+\midrule
+\multirow{8}{*}{C2 (predictor)}
+ & BiLSTM layers / units & 2 / 48 \\
+ & Head hidden units & 48 \\
+ & Dropout & 0.4 \\
+ & Optimiser, learning rate & Adam, $5 \times 10^{-4}$ \\
+ & Weight decay & $5 \times 10^{-4}$ \\
+ & Batch / max.\ epochs / patience & 64 / 100 / 25 \\
+ & Gradient clipping (norm) & 5.0 \\
+ & Stage-loss weight $\lambda$ & 1.0 \\
+\midrule
+Augmentation & Ratio $r$ & 0.75 \\
+\multirow{2}{*}{C3 (conformal)} & Inner groups $K$ & 4 \\
+ & Miscoverage $\alpha$ & 0.10\textsuperscript{a} \\
+\bottomrule
+\end{tabular}
+
+\vspace{2pt}
+\raggedright\scriptsize \textsuperscript{a}Headline level; 0.05, 0.15
+and 0.20 are also evaluated.
+\end{table}
+
+All models were implemented in PyTorch and trained on a single NVIDIA
+T4 GPU. Recurrent training on the GPU is not bit-wise reproducible, and
+the RUL error of a given configuration varies by about
+$\pm 0.015$--$0.02$ from run to run. Every configuration is therefore
+trained under five seeds; with 5~folds and 4~inner models, each
+configuration comprises 100 trained predictors. Results are the mean
+and standard deviation over seeds of the fold-averaged metrics, and a
+difference smaller than the seed-to-seed variability is not interpreted
+as an effect.
+
+% ------------------------------------------------------------
+\subsection{Evaluation Metrics}
+\label{sec:metrics}
+
+Point accuracy is the root mean square error on the normalised RUL
+scale, computed per test bearing and then averaged, so that the
+long-lived bearings, which supply most windows, do not dominate:
+\begin{equation}
+  \mathrm{RMSE} = \frac{1}{|\mathcal{B}_{\mathrm{te}}|}
+  \sum_{b \in \mathcal{B}_{\mathrm{te}}}
+  \sqrt{ \frac{1}{|\mathcal{W}_b|} \sum_{t \in \mathcal{W}_b}
+  \left( \hat{y}^{b}_{t} - y^{b}_{t} \right)^2 } ,
+  \label{eq:rmse}
+\end{equation}
+where $\mathcal{W}_b$ is the set of evaluated windows of bearing $b$.
+Interval quality is measured by the prediction interval coverage
+probability and the mean prediction interval width,
+\begin{equation}
+  \mathrm{PICP} = \frac{1}{n} \sum_{i=1}^{n}
+  \mathbb{1}\left\{ y_i \in \hat{C}(\mathbf{X}_i) \right\},
+  \qquad
+  \mathrm{MPIW} = \frac{1}{n} \sum_{i=1}^{n}
+  \left| \hat{C}(\mathbf{X}_i) \right| ,
+  \label{eq:picp_mpiw}
+\end{equation}
+computed over the test windows of each fold, with intervals clipped to
+$[0,1]$. PICP should lie at or slightly above $1-\alpha$, and a smaller
+MPIW is better only when PICP is maintained, so the two are always
+reported together. All metrics are reported for the healthy, early and
+near-failure stages, for the post-FPT windows and for all windows.
+Stage subsets are always defined by the true stage, so that the
+configurations are compared on the same windows.\\
+
+Three versions of C3 are compared, all built on the same CV+
+residuals: a single quantile for all windows; quantiles per
+\emph{predicted} stage, which is the deployable framework; and
+quantiles per \emph{true} stage, which uses information available only
+after failure and serves as a reference for what perfect stage
+recognition would achieve. The stage prediction itself is assessed by
+its accuracy and by the recall and precision of the near-failure
+stage.

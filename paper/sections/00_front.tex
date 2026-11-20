@@ -1,0 +1,128 @@
+% ============================================================
+%  Front matter: title, abstract, highlights, keywords, Section 1
+% ============================================================
+
+\begin{abstract}
+Remaining useful life (RUL) predictions support maintenance decisions
+only if their uncertainty is reported reliably, and most reliably in
+the near-failure regime where decisions are taken. That regime is also
+the least represented in run-to-failure data, and the few available
+run-to-failure units leave little data for calibrating uncertainty.
+This paper proposes a three-stage framework for bearing RUL prediction
+that addresses these constraints together. A stage-conditioned
+Wasserstein GAN synthesises complete multivariate near-failure windows
+for training (C1). A multi-task BiLSTM with temporal attention predicts
+the RUL and the degradation stage jointly from a shared encoder (C2).
+Stage-conditional cross-conformal prediction (CV+) turns each point
+prediction into an interval, uses every non-test bearing for
+calibration, and conditions the interval on the stage predicted by
+C2 (C3). Stage labels and RUL targets are derived automatically from a
+guarded health-indicator criterion. On the XJTU-SY dataset, evaluated
+with bearing-level cross-validation over five seeds, multi-task
+learning lowers the near-failure RMSE from 0.225 to 0.206 and the
+overall RMSE from 0.385 to 0.291. Cross-conformal calibration restores
+nominal coverage: 0.917 overall at a 90\% target, against 0.74--0.83
+for split conformal calibrated on two bearings. Conditioning on the
+stage predicted by the multi-task model narrows the intervals of the
+full framework by about 20\% relative to a single quantile, at higher
+coverage.
+Generative augmentation produces realistic windows but does not change
+accuracy or interval quality significantly on its own. A per-bearing
+analysis shows that coverage holds on average over bearings but not
+for every bearing, with the shortest-lived bearings least well
+covered.
+\end{abstract}
+
+\begin{highlights}
+\item Stage labels and piecewise RUL targets derived without manual annotation.
+\item Multi-task RUL and stage learning lowers near-failure and overall RMSE.
+\item Cross-conformal calibration uses all non-test bearings and restores 90\% coverage.
+\item The predicted stage narrows conformal intervals by about 20\% at equal coverage.
+\item Per-bearing coverage exposes the limits of the guarantee on short-lived bearings.
+\end{highlights}
+
+\begin{keyword}
+Remaining useful life \sep Rolling bearings \sep Conformal prediction
+\sep Uncertainty quantification \sep Multi-task learning
+\sep Generative adversarial networks
+\end{keyword}
+
+\end{frontmatter}
+
+% ------------------------------------------------------------
+\section{Introduction}
+\label{sec:introduction}
+
+Rolling bearings are among the most frequent sources of failure in
+rotating machinery, and their unplanned failure stops production and
+can damage surrounding components. Predictive maintenance addresses
+this by estimating the remaining useful life (RUL) of each bearing from
+its condition-monitoring signals and scheduling intervention before
+failure. Deep learning models trained on vibration data now estimate
+bearing RUL with good average accuracy on public run-to-failure
+benchmarks such as XJTU-SY~\cite{8576668, lei2019xjtusy}. A point
+estimate alone, however, is a weak basis for a maintenance decision.
+The decision maker must also know how far the true RUL may lie from the
+estimate, and this knowledge matters most close to failure, when the
+cost of an error is highest.\\
+
+Three properties of run-to-failure data make this difficult. First,
+bearings spend most of their life in a healthy state, so the
+near-failure regime, where predictions matter most, is the least
+represented in the training data. Second, most uncertainty estimates
+used for RUL, such as Bayesian layers, Monte Carlo dropout or Gaussian
+output layers, rest on distributional assumptions and carry no
+coverage guarantee; they are frequently overconfident in
+practice~\cite{wang_uncertainty-aware_2026}. Conformal
+prediction~\cite{vovk2005algorithmic, lei2018distribution} removes
+these assumptions and provides intervals with finite-sample coverage,
+but its guarantee rests on the calibration data resembling the test
+data. Third, a run-to-failure dataset contains few units: XJTU-SY has
+fifteen bearings. Holding out a calibration set therefore leaves very
+few bearings to represent the variability between units, and the
+coverage guarantee, which is formally marginal, may not hold where it
+is needed.\\
+
+Each of these difficulties has been addressed separately. Generative
+adversarial networks have been used to enlarge the near-failure
+regime~\cite{9486650, lu_joint_2022}, mostly on scalar health
+indicators and evaluated through point accuracy only. Multi-task
+models that predict the degradation stage alongside the RUL improve the
+learned representation~\cite{8709822}. Conformal prediction has very
+recently been applied to bearing RUL~\cite{wang_uncertainty-aware_2026,
+11373138}, with coverage reported in aggregate over all windows. No
+existing study combines the three, and none conditions the conformal
+interval on the degradation stage that a multi-task model predicts, or
+addresses the small number of units available for calibration.\\
+
+This paper proposes a three-stage framework that addresses these
+constraints together, and makes the following contributions:
+\begin{itemize}
+  \item \textbf{C1, stage-conditioned generative augmentation.} A
+  Wasserstein GAN with gradient penalty, conditioned on the degradation
+  stage, synthesises complete multivariate near-failure windows, which
+  enter the training data only.
+  \item \textbf{C2, multi-task RUL and stage prediction.} A BiLSTM with
+  temporal attention predicts the RUL and the degradation stage from a
+  shared encoder. The stage labels are derived automatically from a
+  guarded health-indicator criterion, and the RUL target is piecewise.
+  \item \textbf{C3, stage-conditional cross-conformal prediction.}
+  Cross-conformal calibration (CV+) uses every non-test bearing for
+  calibration, and the interval is conditioned on the stage predicted
+  by the multi-task model of C2, so that a single network supplies the
+  RUL estimate, the stage and the interval.
+\end{itemize}
+The framework is evaluated on XJTU-SY with bearing-level
+cross-validation, a $2 \times 2$ ablation of C1 and C2, five random
+seeds, and a per-bearing analysis of coverage. The evaluation is
+reported with its full protocol (RUL scale, target shape, scoring
+window and aggregation), so that the results can be compared with the
+literature without ambiguity.\\
+
+The remainder of the paper is organised as follows.
+Section~\ref{sec:related_work} reviews related work.
+Section~\ref{sec:methodology} presents the framework.
+Section~\ref{sec:experimental_setup} describes the dataset, the data
+preparation and the evaluation protocol. Section~\ref{sec:results}
+reports the results, Section~\ref{sec:discussion} discusses them and
+their limitations, and Section~\ref{sec:conclusion} concludes.

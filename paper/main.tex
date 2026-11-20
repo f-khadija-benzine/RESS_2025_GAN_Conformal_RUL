@@ -1,0 +1,49 @@
+% ============================================================
+%  RESS submission — full article
+%  Compile: pdflatex main; bibtex main; pdflatex main; pdflatex main
+%  Bibliography: reference.bib (existing) + new_bib_entries.bib
+% ============================================================
+\documentclass[review]{elsarticle}
+
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs, multirow}
+\usepackage{colortbl, xcolor}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{rotating}
+\usepackage[hidelinks]{hyperref}
+
+\journal{Reliability Engineering \& System Safety}
+
+\begin{document}
+
+\begin{frontmatter}
+
+\title{Three-Stage Framework for Bearing Remaining Useful Life
+Prediction: Conditional GAN Augmentation, Multi-task Learning, and
+Conformal Prediction Intervals}
+
+\author[ensta]{Fatima Khadija Benzine}
+% \author[...]{Co-author}
+\affiliation[ensta]{organization={IECPS Laboratory, \'Ecole Nationale
+Sup\'erieure de Technologie Avanc\'ee (ENSTA)}, city={Algiers},
+country={Algeria}}
+
+\input{sections/00_front}
+
+\input{sections/02_related_work}
+\input{sections/03_methodology}
+\input{sections/04_setup}
+\input{sections/05_results}
+\input{sections/06_discussion}
+
+\section*{Data and code availability}
+The XJTU-SY dataset is publicly available~\cite{lei2019xjtusy}. The code,
+the saved predictions and the analysis scripts are available at
+\url{https://github.com/f-khadija-benzine/RESS_2025_GAN_Conformal_RUL}.
+
+\bibliographystyle{elsarticle-num}
+\bibliography{reference,new_bib_entries}
+
+\end{document}
