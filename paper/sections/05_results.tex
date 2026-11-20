@@ -1,0 +1,446 @@
+% ============================================================
+%  Section 5 — Results
+%  Measured outcomes only; the methods are defined in Sections 3-4.
+%  All figures: XJTU-SY, 5 outer folds, 5 seeds, alpha = 0.10 unless
+%  stated; mean +/- std over seeds of the fold-averaged metrics.
+%  Source: repo results/09_cvplus (paper_tables.json,
+%  per_bearing_report.md) and results/c3_offline.
+% ============================================================
+
+\section{Results}
+\label{sec:results}
+
+% ------------------------------------------------------------
+\subsection{Synthetic Near-Failure Windows}
+\label{sec:res_gan}
+
+The synthetic near-failure windows were assessed on four criteria
+before entering training: separability from real windows, diversity,
+location in a two-dimensional embedding, and per-feature marginal
+distributions. Table~\ref{tab:gan_quality} reports the first two for
+the generators of the five outer folds, trained on the same
+configuration as the inner generators.
+
+\begin{table}[htbp]
+\centering
+\caption{Quality of the synthetic near-failure windows per fold.
+Separability: accuracy of a classifier separating real from synthetic
+windows (50\% = indistinguishable). Diversity ratio: mean pairwise
+distance among synthetic windows divided by that among real windows
+(1 = matched diversity).}
+\label{tab:gan_quality}
+\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{cccccc}
+\toprule
+& \multicolumn{5}{c}{\textbf{Fold}} \\
+\cmidrule(lr){2-6}
+\textbf{Metric} & 1 & 2 & 3 & 4 & 5 \\
+\midrule
+Separability (\%) & 67.7 & 59.1 & 61.5 & 70.2 & 64.7 \\
+Diversity ratio   & 0.82 & 0.78 & 0.81 & 0.78 & 0.87 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Separability stays between 59\% and 70\%, approaching chance in the
+folds richest in near-failure data, and the diversity ratio between
+0.78 and 0.87, so the generator reproduces the spread of the real data
+without mode collapse. In the embedding of Fig.~\ref{fig:tsne}, the
+synthetic windows occupy the same regions as the real ones in every
+fold, including the small isolated sub-populations, and form no
+separate cluster. The per-feature distributions of
+Fig.~\ref{fig:feature_dist} coincide for all twenty features,
+including the bimodal shape of the amplitude features near failure.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{figures/04_tsne_real_vs_synthetic.png}
+  \caption{t-SNE embedding of real (blue) and synthetic (red)
+  near-failure windows for each fold.}
+  \label{fig:tsne}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/04_feature_distributions.png}
+  \caption{Per-feature distributions of real and synthetic near-failure
+  windows for a representative fold.}
+  \label{fig:feature_dist}
+\end{figure}
+
+Two labelling schemes for the synthetic windows were compared in an
+exploratory sweep (Table~\ref{tab:aug_sweep}): the label of the nearest
+real near-failure window in feature space, and the sampling scheme of
+Eq.~\eqref{eq:syn_label}. The nearest-neighbour scheme shifted the
+synthetic labels upward (mean 0.27 against 0.24 for real windows),
+pushing the predictor toward overestimating the remaining life. The
+sampling scheme matched the real mean within 0.01 in every fold and
+gave a lower error at every ratio, with its minimum at $r = 0.75$. A
+control in which real near-failure windows were duplicated instead of
+synthesised gave no improvement (near-failure RMSE 0.247 at ratio 0.5
+and 0.250 at ratio 1.0), which indicates that the predictor was not
+limited by the number of near-failure windows as such.
+
+\begin{table}[htbp]
+\centering
+\caption{Exploratory sweep (single run per setting) of near-failure
+RMSE by labelling scheme and augmentation ratio.}
+\label{tab:aug_sweep}
+\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Scheme} & \textbf{0.25} & \textbf{0.50} & \textbf{0.75} & \textbf{1.00} \\
+\midrule
+Sampling          & 0.272 & 0.247 & \textbf{0.231} & 0.232 \\
+Nearest-neighbour & 0.266 & 0.265 & 0.239 & 0.243 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ------------------------------------------------------------
+\subsection{Point Accuracy and Stage Recognition}
+\label{sec:res_accuracy}
+
+Table~\ref{tab:rmse} reports the RMSE of the four configurations by
+stage. Multi-task learning is the component that improves accuracy.
+It lowers the near-failure RMSE from 0.225 to 0.216, and to 0.206 when
+combined with augmentation, the lowest and least variable value. The
+effect is larger over the whole life: the overall RMSE falls from 0.385
+to 0.297 with C2 and to 0.291 with both components. Most of this gain
+comes from the healthy windows, whose error is the largest and most
+variable in the baseline (0.392 $\pm$ 0.290) and drops to about 0.26
+with C2. Augmentation alone leaves the near-failure RMSE unchanged
+(0.226) and lowers the overall RMSE from 0.385 to 0.347, a difference
+within the seed-to-seed variability of that metric.
+
+\begin{table}[htbp]
+\centering
+\caption{RMSE (normalised RUL, per bearing) by stage, mean $\pm$
+standard deviation over five seeds. Point estimate: mean of the four
+inner models.}
+\label{tab:rmse}
+\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Config.} & \textbf{Healthy} & \textbf{Early} &
+\textbf{Near-failure} & \textbf{Post-FPT} & \textbf{All} \\
+\midrule
+Baseline & $0.392 \pm 0.290$ & $0.360 \pm 0.120$ & $0.225 \pm 0.041$ & $0.339 \pm 0.068$ & $0.385 \pm 0.161$ \\
++GAN     & $0.337 \pm 0.226$ & $0.329 \pm 0.084$ & $0.226 \pm 0.038$ & $0.313 \pm 0.042$ & $0.347 \pm 0.121$ \\
++MT      & $0.261 \pm 0.173$ & $0.280 \pm 0.068$ & $0.216 \pm 0.035$ & $0.284 \pm 0.045$ & $0.297 \pm 0.101$ \\
++GAN+MT  & $0.266 \pm 0.166$ & $0.280 \pm 0.075$ & $\mathbf{0.206 \pm 0.026}$ & $\mathbf{0.275 \pm 0.041}$ & $\mathbf{0.291 \pm 0.098}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The stage on which C3 is conditioned is recognised with an accuracy of
+$0.722 \pm 0.021$ by the stage network of the configurations without
+augmentation, and $0.706 \pm 0.018$ by the stage head of the full
+framework. Near-failure windows are found reliably, with a recall of
+$0.887 \pm 0.018$ and $0.896 \pm 0.034$ respectively, but the
+precision is lower ($0.730 \pm 0.025$ and $0.674 \pm 0.042$): the
+main error is to assign early-degradation windows to the near-failure
+stage.
+
+% ------------------------------------------------------------
+\subsection{Calibration on Two Bearings versus Cross-Conformal Calibration}
+\label{sec:res_calibration}
+
+To measure the effect of the calibration scheme, the configurations
+were also calibrated by split conformal prediction, with one predictor
+per fold trained on 9~bearings and two held-out calibration bearings
+chosen to contain at least 100 near-failure windows and a stage
+composition close to the test set. Table~\ref{tab:calibration}
+compares this protocol with CV+ for the baseline and the full
+framework.
+
+\begin{table*}[!htbp]
+\centering
+\caption{Coverage and width at a 90\% target under split conformal
+calibration on two bearings and under cross-conformal (CV+)
+calibration on twelve bearings. PICP $\pm$ std over seeds / MPIW.}
+\label{tab:calibration}
+\scriptsize
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{llcccc}
+\toprule
+& & \multicolumn{2}{c}{\textbf{Baseline}} & \multicolumn{2}{c}{\textbf{+GAN+MT}} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+\textbf{Calibration} & \textbf{Grouping} & \textbf{All} & \textbf{Near-failure} & \textbf{All} & \textbf{Near-failure} \\
+\midrule
+\multirow{3}{*}{Split, 2 bearings}
+ & Single $q$        & $0.793 \pm 0.069$ / 0.68 & $0.871 \pm 0.105$ / 0.69 & $0.830 \pm 0.050$ / 0.59 & $0.839 \pm 0.080$ / 0.63 \\
+ & Predicted stage   & $0.740 \pm 0.022$ / 0.63 & $0.887 \pm 0.046$ / 0.65 & $0.817 \pm 0.047$ / 0.54 & $0.884 \pm 0.046$ / 0.67 \\
+ & True stage        & $0.786 \pm 0.052$ / 0.55 & $0.860 \pm 0.027$ / 0.47 & $0.811 \pm 0.034$ / 0.46 & $0.864 \pm 0.025$ / 0.49 \\
+\midrule
+\multirow{3}{*}{CV+, 12 bearings}
+ & Single $q$        & $0.898 \pm 0.087$ / 0.84 & $0.971 \pm 0.029$ / 0.88 & $0.856 \pm 0.043$ / 0.75 & $0.959 \pm 0.024$ / 0.79 \\
+ & Predicted stage   & $\mathbf{0.909 \pm 0.040}$ / 0.67 & $0.968 \pm 0.028$ / 0.83 & $\mathbf{0.917 \pm 0.039}$ / 0.60 & $0.954 \pm 0.023$ / 0.84 \\
+ & True stage        & $0.898 \pm 0.065$ / 0.76 & $0.905 \pm 0.027$ / 0.54 & $0.880 \pm 0.038$ / 0.69 & $0.910 \pm 0.014$ / 0.55 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+Calibrated on two bearings, every version under-covers: overall
+coverage lies between 0.74 and 0.83, and even the true stage gives only
+0.79--0.81 overall and 0.86 near failure. The intervals are narrow
+because they are calibrated on two bearings that do not represent the
+test bearings. Under CV+, coverage returns to the nominal level: the
+predicted-stage version reaches 0.909 and 0.917 overall, and the
+true-stage version 0.905 and 0.910 near failure. The intervals are
+wider than under split calibration, which is the expected price of
+calibrating against the full variability of the non-test bearings.
+All remaining results use CV+.
+
+% ------------------------------------------------------------
+\subsection{Interval Quality and Stage Conditioning}
+\label{sec:res_intervals}
+
+Table~\ref{tab:intervals} compares the three versions of C3 for the
+four configurations.
+
+\begin{table*}[!htbp]
+\centering
+\caption{CV+ coverage and width at a 90\% target by grouping and
+configuration. PICP $\pm$ std over seeds / MPIW (clipped). Stage
+subsets are defined by the true stage. The predicted stage comes from
+the model's own stage head (+MT, +GAN+MT) or from the separate stage
+network (baseline, +GAN).}
+\label{tab:intervals}
+\scriptsize
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{llccccc}
+\toprule
+\textbf{Config.} & \textbf{Grouping} & \textbf{Healthy} & \textbf{Early} &
+\textbf{Near-failure} & \textbf{Post-FPT} & \textbf{All} \\
+\midrule
+\multirow{3}{*}{Baseline}
+ & Single $q$      & $0.825 \pm 0.153$ / 0.83 & $0.902 \pm 0.080$ / 0.87 & $0.971 \pm 0.029$ / 0.88 & $0.932 \pm 0.057$ / 0.87 & $0.898 \pm 0.087$ / 0.84 \\
+ & Predicted stage & $0.900 \pm 0.037$ / 0.62 & $0.819 \pm 0.100$ / 0.77 & $0.968 \pm 0.028$ / 0.83 & $0.885 \pm 0.067$ / 0.80 & $0.909 \pm 0.040$ / 0.67 \\
+ & True stage      & $0.827 \pm 0.153$ / 0.80 & $0.944 \pm 0.013$ / 0.88 & $0.905 \pm 0.027$ / 0.54 & $0.925 \pm 0.013$ / 0.73 & $0.898 \pm 0.065$ / 0.76 \\
+\midrule
+\multirow{3}{*}{+GAN}
+ & Single $q$      & $0.846 \pm 0.086$ / 0.86 & $0.901 \pm 0.079$ / 0.88 & $0.972 \pm 0.028$ / 0.90 & $0.932 \pm 0.055$ / 0.89 & $0.905 \pm 0.064$ / 0.86 \\
+ & Predicted stage & $0.799 \pm 0.062$ / 0.60 & $0.851 \pm 0.088$ / 0.80 & $0.969 \pm 0.028$ / 0.82 & $0.903 \pm 0.057$ / 0.81 & $0.872 \pm 0.030$ / 0.66 \\
+ & True stage      & $0.853 \pm 0.086$ / 0.84 & $0.939 \pm 0.020$ / 0.89 & $0.908 \pm 0.022$ / 0.54 & $0.923 \pm 0.021$ / 0.74 & $0.904 \pm 0.045$ / 0.79 \\
+\midrule
+\multirow{3}{*}{+MT}
+ & Single $q$      & $0.807 \pm 0.100$ / 0.73 & $0.833 \pm 0.100$ / 0.79 & $0.955 \pm 0.044$ / 0.79 & $0.886 \pm 0.075$ / 0.79 & $0.860 \pm 0.076$ / 0.74 \\
+ & Predicted stage & $0.931 \pm 0.013$ / 0.53 & $0.759 \pm 0.089$ / 0.67 & $0.960 \pm 0.025$ / 0.80 & $0.847 \pm 0.057$ / 0.73 & $0.909 \pm 0.026$ / 0.60 \\
+ & True stage      & $0.807 \pm 0.100$ / 0.69 & $0.911 \pm 0.040$ / 0.86 & $0.893 \pm 0.007$ / 0.58 & $0.898 \pm 0.026$ / 0.73 & $0.871 \pm 0.040$ / 0.69 \\
+\midrule
+\multirow{3}{*}{+GAN+MT}
+ & Single $q$      & $0.793 \pm 0.077$ / 0.74 & $0.823 \pm 0.039$ / 0.79 & $0.959 \pm 0.024$ / 0.79 & $0.882 \pm 0.031$ / 0.79 & $0.856 \pm 0.043$ / 0.75 \\
+ & Predicted stage & $0.900 \pm 0.051$ / 0.52 & $0.809 \pm 0.133$ / 0.74 & $0.954 \pm 0.023$ / 0.84 & $0.871 \pm 0.080$ / 0.78 & $\mathbf{0.917 \pm 0.039}$ / \textbf{0.60} \\
+ & True stage      & $0.793 \pm 0.077$ / 0.70 & $0.943 \pm 0.022$ / 0.88 & $0.910 \pm 0.014$ / 0.55 & $0.925 \pm 0.020$ / 0.73 & $0.880 \pm 0.038$ / 0.69 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\textit{Effect of stage conditioning.} Conditioning on the predicted
+stage gives the narrowest intervals over the whole life in every
+configuration, at a coverage equal to or above that of the single
+quantile except for +GAN (0.872 against 0.905). For the full framework, the overall width falls from 0.75 to
+0.60, about 20\%, while coverage rises from 0.856 to 0.917. The gain
+comes from the healthy windows, whose intervals narrow from 0.74 to
+0.52 while their coverage rises from 0.79 to 0.90. Within the predicted
+stages, on which the guarantee is defined, the full framework covers
+$0.941 \pm 0.037$ of the windows predicted healthy,
+$0.895 \pm 0.072$ of those predicted in early degradation and
+$0.937 \pm 0.035$ of those predicted near failure.\\
+
+\textit{Cost of stage errors.} Measured on the true stages, the
+predicted-stage version over-covers the near-failure windows
+(0.95--0.97) with intervals of 0.80--0.84, and under-covers the early
+degradation windows (0.76--0.85). The true-stage reference shows what
+correct stage recognition would give: 0.89--0.91 near failure with
+intervals of 0.54--0.58, about 35\% narrower. The difference follows
+from the precision of Section~\ref{sec:res_accuracy}: early-degradation
+windows predicted as near-failure enter the near-failure calibration
+group with larger residuals and widen its quantile, while the
+near-failure windows themselves receive more width than they need.\\
+
+\textit{Effect of C1 and C2 on the intervals.} With the predicted
+stage, multi-task learning narrows the intervals over the whole life
+from 0.67 to 0.60 at unchanged coverage (0.909). Augmentation leaves
+the width unchanged (0.66) and lowers the overall coverage of the
+single-task model to 0.872, a difference of the order of one seed
+standard deviation. Combined with C2, augmentation gives the same
+width as C2 alone (0.60) and a coverage of 0.917.\\
+
+\textit{Other confidence levels.} Table~\ref{tab:alpha} reports the
+predicted-stage version at four levels. Coverage follows the nominal
+level over the whole life for the full framework, from 0.954 at a 95\%
+target to 0.882 at 80\%, with the width shrinking accordingly. The
+near-failure coverage stays between 0.95 and 0.97 at every level,
+consistent with the over-coverage described above, and the post-FPT
+coverage remains a few points below target.
+
+\begin{table}[htbp]
+\centering
+\caption{CV+ with predicted-stage conditioning at four confidence
+levels: PICP over all windows, post-FPT and near-failure windows, and
+MPIW over all windows.}
+\label{tab:alpha}
+\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Config.} & \textbf{Target} & \textbf{PICP all} &
+\textbf{PICP post-FPT} & \textbf{PICP near-failure} & \textbf{MPIW all} \\
+\midrule
+\multirow{4}{*}{Baseline}
+ & 0.95 & 0.935 & 0.923 & 0.969 & 0.74 \\
+ & 0.90 & 0.909 & 0.885 & 0.968 & 0.67 \\
+ & 0.85 & 0.890 & 0.854 & 0.966 & 0.62 \\
+ & 0.80 & 0.843 & 0.835 & 0.962 & 0.60 \\
+\midrule
+\multirow{4}{*}{+GAN+MT}
+ & 0.95 & 0.954 & 0.908 & 0.959 & 0.66 \\
+ & 0.90 & 0.917 & 0.871 & 0.954 & 0.60 \\
+ & 0.85 & 0.897 & 0.841 & 0.950 & 0.58 \\
+ & 0.80 & 0.882 & 0.823 & 0.946 & 0.56 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ------------------------------------------------------------
+\subsection{Coverage per Bearing}
+\label{sec:res_per_bearing}
+
+Averages over windows can hide bearings on which the intervals fail.
+Table~\ref{tab:per_bearing} reports the coverage of the full framework
+for each bearing, each tested once over the five folds.
+
+\begin{table}[htbp]
+\centering
+\caption{Per-bearing coverage of the full framework (+GAN+MT, CV+,
+predicted stage, 90\% target), mean over five seeds. $n$: test windows
+(near-failure windows).}
+\label{tab:per_bearing}
+\footnotesize
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Bearing} & \textbf{$n$} & \textbf{PICP all} &
+\textbf{PICP near-failure} & \textbf{MPIW all} \\
+\midrule
+1-1 & 92 (4)      & 0.95 & 1.00 & 0.80 \\
+1-2 & 130 (43)    & 0.97 & 1.00 & 0.91 \\
+1-3 & 127 (45)    & 0.93 & 1.00 & 0.71 \\
+1-4 & 91 (18)     & \textbf{0.76} & \textbf{0.23} & 0.26 \\
+1-5 & 21 (4)      & 1.00 & 1.00 & 0.92 \\
+2-1 & 460 (19)    & 0.99 & 0.96 & 0.46 \\
+2-2 & 130 (17)    & 0.96 & 1.00 & 0.76 \\
+2-3 & 502 (197)   & 0.92 & 1.00 & 0.75 \\
+2-4 & 11 (5)      & \textbf{0.78} & \textbf{0.64} & 0.78 \\
+2-5 & 308 (110)   & 0.89 & 0.99 & 0.71 \\
+3-1 & 2507 (76)   & 0.99 & 1.00 & 0.45 \\
+3-2 & 2465 (632)  & 0.84 & 1.00 & 0.94 \\
+3-3 & 340 (10)    & 0.99 & 1.00 & 0.44 \\
+3-4 & 1484 (50)   & 1.00 & 1.00 & 0.26 \\
+3-5 & 83 (3)      & \textbf{0.50} & 1.00 & 0.77 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Ten of the fifteen bearings are covered at 0.90 or more. Near failure,
+thirteen bearings are covered at 0.96 or more. The failures are
+concentrated in a few bearings. Bearing~1-4 is covered at only 0.23
+near failure, with intervals of 0.26, the narrowest of the dataset
+together with Bearing~3-4: the predictor is confident and wrong on
+this bearing. Bearing~2-4, the shortest (11~windows), is covered at
+0.78 overall and 0.64 near failure. Bearing~3-5 is covered at 0.50
+overall while its three near-failure windows are covered; its errors
+lie in the earlier stages. Bearing~3-2, which holds about half of all
+near-failure windows, is fully covered near failure but at 0.84 overall.
+Three of the four weakest bearings (1-4, 2-4 and 3-5) are among the
+shortest-lived of the dataset.\\
+
+Because the CV+ quantiles weight every calibration window equally, a
+long bearing such as 3-2 contributes most of the calibration windows of
+its group. A bearing-balanced variant, in which each calibration window
+is weighted by the inverse number of windows of its bearing in its
+group (weighted conformal prediction~\cite{tibshirani2019conformal}),
+was therefore evaluated as a robustness check. For the full framework
+it gives an overall coverage of $0.924 \pm 0.012$, a post-FPT coverage
+of 0.893 and a near-failure coverage of 0.958, with intervals of 0.67
+over the whole life. Coverage is more stable across seeds and closer to
+target after the FPT, at the cost of intervals about 12\% wider. The
+weakest bearings remain under-covered, so their errors are specific to
+those bearings rather than a consequence of the calibration weighting.
+
+% ------------------------------------------------------------
+\subsection{Comparison with Published Results}
+\label{sec:res_benchmark}
+
+Table~\ref{tab:benchmark} places the framework among published results
+on XJTU-SY. Absolute normalised RMSE values span an order of magnitude
+for the same dataset, from 0.044 to 0.171, and most studies do not
+state the RUL target, the scoring window or the aggregation. These
+choices change the RMSE substantially: in this study the same
+predictor gives 0.206 near failure, 0.275 after the FPT and 0.291 over
+the whole life. A direct ranking by RMSE is therefore not meaningful.
+The uncertainty-aware studies are more directly comparable. The two
+bearing studies using conformal prediction report an aggregate coverage
+of 0.945~\cite{wang_uncertainty-aware_2026} and 0.919 with a width of
+0.654~\cite{11373138} at a 90\% target. The framework obtains 0.917
+with a width of 0.60 over the whole life, and is the only one to report
+coverage by stage and by bearing.
+
+\begin{table*}[!htbp]
+\centering
+\caption{Reported RUL prediction results on XJTU-SY. ``NR'': not
+reported in the source, which precludes strict comparability.}
+\label{tab:benchmark}
+\scriptsize
+\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{llcccccl}
+\toprule
+\textbf{Study} & \textbf{Method} & \textbf{RMSE} & \textbf{Unit} &
+\textbf{Label} & \textbf{Window} & \textbf{Aggreg.} &
+\textbf{Uncertainty (PICP/MPIW)} \\
+\midrule
+\multicolumn{8}{l}{\textit{Point-prediction methods (absolute normalised RMSE)}}\\
+Jin et al.~\cite{app15179529}        & EMD--BiLSTM--Transf. & 0.044 & norm. & NR & NR & NR & none \\
+Zhang et al.~\cite{11682466}         & WI-DSNAS-SS          & 0.054 & norm. & NR & NR & NR & none \\
+Kumar et al.~\cite{machines14060672} & PPO                  & 0.069\textsuperscript{a} & norm. & piecew. & post-FPT & NR & none \\
+An et al.~\cite{10935355}            & ILDENet              & 0.082 & norm. & NR & NR & NR & none \\
+Feng et al.~\cite{FENG2026105865}    & RRDT--DCDTN          & 0.098 & norm. & NR & NR & per-bear. & none \\
+Zheng et al.~\cite{10423873}         & ResNet-AE--TD3       & 0.142 & norm. & NR & NR & NR & none \\
+Qiao et al.~\cite{QIAO2026112248}    & DM-SVW               & 0.16  & norm. & NR & post-FPT & per-bear. & none \\
+Luo et al.~\cite{11637655}           & CNN--TCN             & 0.171 & norm. & NR & NR & per-bear. & none \\
+\midrule
+\multicolumn{8}{l}{\textit{Relative-improvement methods (no comparable absolute RMSE)}}\\
+Lu et al.~\cite{9486650}             & GAN-LSTM             & \multicolumn{4}{l}{$-29\%$ vs LSTM (rel.)}       & time-wt. & none \\
+Lu et al.~\cite{lu_joint_2022}       & HP-JT                & \multicolumn{4}{l}{$-29.4\%$ vs HP (minutes)}    & time-wt. & Gaussian layer \\
+Tang et al.~\cite{10555355}          & CD-CI                & \multicolumn{4}{l}{$-52\%$ vs CNN-LSTM (rel.)}   & NR & 95\% bands (NR) \\
+\midrule
+\multicolumn{8}{l}{\textit{Uncertainty-aware methods}}\\
+Zhang et al.~\cite{zhang_explainable_2025}     & E-GTQN      & NR & NR & NR & NR & NR & quantile+KDE: 0.940 cov. \\
+Wang et al.~\cite{wang_uncertainty-aware_2026} & VAE-Transf.\ conf. & NR & norm. & NR & NR & NR & conformal: 0.945 / 0.924 \\
+Bott et al.~\cite{11373138}          & Phys.-sim.+CNF conf. & 0.106\textsuperscript{b} & norm. & NR & whole & NR & conformal: 0.919 / 0.654 \\
+\midrule
+\rowcolor[RGB]{198,224,180}
+\textbf{Proposed} & \textbf{GAN + MT BiLSTM + CV+} &
+\textbf{0.206}\textsuperscript{c} & \textbf{norm.} & \textbf{piecew.} &
+\textbf{stage 3} & \textbf{per-bear.} & \textbf{conformal: 0.917 / 0.60}\textsuperscript{d} \\
+\bottomrule
+\end{tabular}
+
+\vspace{3pt}
+\raggedright\scriptsize
+\textsuperscript{a}within-bearing late-test tail only.
+\textsuperscript{b}derived from the reported MSE; synthetic-trained tabular predictor.
+\textsuperscript{c}near-failure stage; 0.275 post-FPT and 0.291 over the whole life.
+\textsuperscript{d}whole life, 90\% target, intervals clipped to $[0,1]$; coverage by stage and by bearing in Tables~\ref{tab:intervals} and~\ref{tab:per_bearing}.
+norm.: normalised. rel.: relative. conf.: conformal. cov.: coverage.
+\end{table*}

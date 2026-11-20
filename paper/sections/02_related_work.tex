@@ -1,4 +1,5 @@
 \section{Related work}
+\label{sec:related_work}
 
 \subsection{Deep Learning for Remaining Useful Life Prediction}
 \label{sec:dl_rul}
@@ -458,9 +459,8 @@ Two features nonetheless distinguish them from the approach proposed
 here. First, both report a single aggregate coverage over the whole
 test population and do not examine whether coverage holds within the
 near-failure regime specifically, where it matters most for maintenance
-safety and where, as shown in Section~\ref{sec:windowing}, the
-heterogeneity of residuals across degradation stages places the
-strongest demands on the calibration procedure. Second, and more
+safety and where the heterogeneity of residuals across degradation
+stages places the strongest demands on the calibration procedure. Second, and more
 fundamentally, both calibrate a model trained on real data only (Wang
 et al.) or on physics-simulated data (Bott et al.); neither employs
 generative adversarial augmentation, and neither investigates how such
@@ -480,8 +480,13 @@ without the stage-conditional calibration needed to guarantee coverage
 within the near-failure regime whose residual distribution differs
 sharply from the healthy one. Third, no study combines conformal
 prediction with multi-task learning on bearing data, which would allow
-the conformal layer to benefit from a representation shared with an
-auxiliary degradation-stage task.
+the conformal layer to be conditioned on the degradation stage that
+the multi-task model itself predicts. A further practical constraint
+is common to all bearing datasets: they contain few run-to-failure
+units, so a held-out calibration partition represents the variability
+between units through very few bearings. Cross-conformal schemes such
+as CV+~\cite{barber2021jackknife} use every training unit for
+calibration in turn, but have not been applied to bearing RUL.
 
 
 \subsection{Multi-task Learning for RUL Prediction}
@@ -687,14 +692,17 @@ BiLSTM with attention jointly predicts RUL and degradation stage,
 where the auxiliary classification task forces the shared encoder to
 learn stage-discriminative features that improve accuracy in the
 critical late-degradation period; and (3)~stage-conditional conformal
-prediction wraps the RUL regression output to produce distribution-free,
-coverage-guaranteed prediction intervals evaluated per degradation
-stage through PICP and MPIW. Beyond this integration, the central
-empirical question examined in this work has not been posed in the
-prior literature: whether stage-conditioned generative augmentation
-improves the quality of the conformal intervals---and in particular the
-reliability of coverage in the near-failure regime---over and above its
-effect on point accuracy.
+prediction, calibrated by cross-conformal CV+ on every non-test
+bearing and conditioned on the stage predicted by the multi-task
+model, wraps the RUL regression output to produce distribution-free
+prediction intervals, evaluated per degradation stage and per bearing
+through PICP and MPIW. Beyond this integration, two empirical
+questions examined in this work have not been posed in the prior
+literature: whether the degradation stage predicted by a multi-task
+model can condition conformal calibration so as to narrow the
+intervals without loss of coverage, and whether stage-conditioned
+generative augmentation changes the quality of the conformal
+intervals over and above its effect on point accuracy.
 
 
 % ============================================================

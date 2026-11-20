@@ -1,0 +1,121 @@
+% ============================================================
+%  Section 6 — Discussion; Section 7 — Conclusion
+% ============================================================
+
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Role of Each Contribution}
+
+The three contributions do not act in the same way. Multi-task learning
+(C2) is the only component that improves the point prediction, and its
+effect is largest on the healthy windows, where the stage task gives
+the encoder an explicit signal that the RUL target is flat. Its role
+does not end with accuracy: its stage head supplies the grouping that
+makes the conformal intervals of C3 about 20\% narrower than a single
+quantile over the whole life, at nominal coverage. The auxiliary task
+therefore serves twice, first to shape the representation and then to
+condition the uncertainty, and a single network provides the RUL, the
+stage and the interval.\\
+
+The calibration scheme of C3 mattered more than any modelling choice
+for the validity of the intervals. With two calibration bearings, no
+version of the intervals reached its target, including the version
+grouped by the true stage. With CV+, every version came close to it.
+On a dataset of fifteen units, the number of bearings that inform the
+calibration is the binding constraint, and a held-out calibration split
+spends too few of them. The price is computational: CV+ trains $K$
+models per fold instead of one.\\
+
+Generative augmentation (C1) produced windows that are hard to
+distinguish from real ones and as diverse, but it did not change
+accuracy or interval quality beyond the seed-to-seed variability, alone
+or combined with C2. The duplication control points to the reason: the
+predictor did not improve when the number of real near-failure windows
+was increased either, so it was not limited by their number. Earlier
+GAN studies on XJTU-SY report gains of 15--30\% in
+RMSE~\cite{9486650, lu_joint_2022}, but on scalar health indicators and
+with other targets and protocols; with a multivariate input, a
+piecewise target and multi-task training, the benefit of additional
+near-failure windows was not measurable here. The finding is negative
+but informative, and it is reported as such rather than as a gain.
+
+\subsection{What the Guarantee Covers}
+
+The coverage guarantee of conformal prediction is marginal: it holds on
+average over bearings drawn from the same population as the
+calibration bearings, not for every bearing. The per-bearing analysis
+makes this concrete. Most bearings are covered at or above the target,
+but a few are covered far below it, and three of the four weakest are
+among the shortest-lived. On those bearings the predictor is wrong
+rather than merely uncertain: Bearing~1-4 receives narrow intervals
+that miss most of its near-failure windows. No calibration scheme can
+repair such errors, as the bearing-balanced variant confirms, because
+they come from degradation behaviour that the other bearings do not
+exhibit. Reporting coverage per bearing is therefore necessary to
+interpret an aggregate coverage on a dataset of this size.\\
+
+Conditioning on the predicted stage also moves coverage between stages.
+The guarantee holds within the predicted stages, and on the true stages
+the near-failure windows are over-covered while the early-degradation
+windows are under-covered. The intervals near failure are about 35\%
+wider than they would be with correct stage recognition. Improving the
+separation between early degradation and near failure is therefore the
+most direct way to narrow the intervals where decisions are taken. From
+a maintenance standpoint the current direction of error is the safer
+one: near failure, the intervals are conservative rather than
+optimistic.
+
+\subsection{Implications for Maintenance Decisions}
+
+The interval supports decisions that a point estimate does not. A
+maintenance rule can act on the lower bound of the interval, scheduling
+intervention when the lower bound of the RUL falls below the lead time
+needed to plan it, so that the decision is protected against
+overestimation of the remaining life at the chosen confidence level.
+Because the interval is conditioned on the predicted stage, the same
+rule automatically becomes more cautious once a bearing is recognised
+as near failure. The per-bearing results also indicate when such a rule
+should not be trusted alone: on short-lived bearings that fail
+abruptly, a confident prediction can still be wrong, and a fixed
+inspection schedule or a threshold on the raw health indicator remains
+a necessary safeguard.
+
+\subsection{Limitations and Future Work}
+
+The study uses a single dataset of fifteen bearings, and its
+conclusions should be confirmed on other run-to-failure datasets, such
+as PRONOSTIA and IMS, and on other components. The stage labels are
+derived from a health-indicator criterion that uses the whole
+trajectory; they are consistent with the visible degradation but are
+not ground truth, and the reference results by true stage inherit this
+definition. CV+ multiplies the training cost by the number of inner
+groups, including one generator per inner model. Finally, the intervals
+are computed independently for each window; for a bearing in service,
+an adaptive conformal scheme that updates the calibration as new
+recordings arrive, and a grouping based on a better recognition of the
+transition to near failure, are natural extensions.
+
+% ------------------------------------------------------------
+\section{Conclusion}
+\label{sec:conclusion}
+
+This paper proposed a three-stage framework for bearing RUL prediction
+combining stage-conditioned generative augmentation, multi-task RUL and
+stage prediction, and stage-conditional cross-conformal intervals, with
+stage labels and RUL targets derived automatically from a guarded
+health-indicator criterion. On XJTU-SY, with bearing-level
+cross-validation and five seeds, multi-task learning lowered the
+near-failure RMSE from 0.225 to 0.206 and the overall RMSE from 0.385
+to 0.291. Cross-conformal calibration on all non-test bearings restored
+nominal coverage, 0.917 overall at a 90\% target, where split
+calibration on two bearings reached at most 0.83. Conditioning the
+intervals on the stage predicted by the multi-task model narrowed them
+by about 20\% at higher coverage, so that a single network delivers the
+RUL estimate, the degradation stage and a calibrated interval.
+Generative augmentation produced realistic near-failure windows but did
+not improve accuracy or intervals measurably. Coverage held on average
+over bearings but not on every bearing, with the shortest-lived
+bearings the least well covered, which shows that per-bearing coverage
+should accompany aggregate coverage when conformal intervals are
+reported on small run-to-failure datasets.
